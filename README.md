@@ -44,10 +44,10 @@ chmod +x V2Ray-TLS+Web-setup.sh
 ### 5. 根据脚本提示完成安装
 ## 运行截图
 <div>
-    <img width="500" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/menu.jpg">
+    <img width="400" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/menu.jpg">
 </div>
 <div>
-    <img width="700" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/mode.jpg">
+    <img width="600" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/mode.jpg">
 </div>
 
 ## 注
