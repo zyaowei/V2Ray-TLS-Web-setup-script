@@ -225,11 +225,13 @@ EOF
         sleep 1s
         systemctl restart nginx
         if [ ${domainconfig_list[i]} -eq 1 ]; then
-            $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp
-            $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp
+            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
+                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
+            fi
         else
-            $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp
-            $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp
+            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
+                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
+            fi
         fi
     if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "sleep 1s && systemctl restart v2ray" --ecc; then
         yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
@@ -958,9 +960,14 @@ remove_v2ray_nginx()
 #获取内核信息
 get_kernel_info()
 {
-    green "正在获取最新版本内核版本号。。。。"
+    green "正在获取最新版本内核版本号。。。。(60内秒未获取成功自动跳过)"
     local kernel_list
-    local kernel_list_temp=($(wget -qO- https://kernel.ubuntu.com/~kernel-ppa/mainline/ | awk -F'\"v' '/v[0-9]/{print $2}' | cut -d '"' -f1 | cut -d '/' -f1 | sort -rV))
+    local kernel_list_temp=($(timeout 60 wget -qO- https://kernel.ubuntu.com/~kernel-ppa/mainline/ | awk -F'\"v' '/v[0-9]/{print $2}' | cut -d '"' -f1 | cut -d '/' -f1 | sort -rV))
+    if [ ${#kernel_list_temp[@]} -le 1 ]; then
+        latest_kernel_version="error"
+        your_kernel_version=`uname -r | cut -d - -f 1`
+        return 1
+    fi
     local i=0
     local i2=0
     local i3=0
@@ -1220,11 +1227,11 @@ remove_other_kernel()
         for ((i=${#kernel_list_image[@]}-1;i>=0;i--))
         do
             if [[ "${kernel_list_image[$i]}" =~ "$kernel_now" ]] ; then     
-                kernel_list_image[$i]=""
+                unset kernel_list_image[$i]
                 ((ok_install++))
             fi
         done
-        if [ "$ok_install" -lt "1" ] ; then
+        if [ $ok_install -lt 1 ] ; then
             red "未发现正在使用的内核，可能已经被卸载"
             yellow "按回车键继续。。。"
             read -s
@@ -1234,15 +1241,19 @@ remove_other_kernel()
         for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
         do
             if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]] ; then
-                kernel_list_modules[$i]=""
+                unset kernel_list_modules[$i]
                 ((ok_install++))
             fi
         done
-        if [ "$ok_install" -lt "1" ] ; then
+        if [ $ok_install -lt 1 ] ; then
             red "未发现正在使用的内核，可能已经被卸载"
             yellow "按回车键继续。。。"
             read -s
             return 1
+        fi
+        if [ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_image[@]} -eq 0 ]; then
+            yellow "没有内核可卸载"
+            return 0
         fi
         apt -y purge ${kernel_list_image[@]} ${kernel_list_modules[@]}
     else
@@ -1255,11 +1266,11 @@ remove_other_kernel()
         for ((i=${#kernel_list[@]}-1;i>=0;i--))
         do
             if [[ "${kernel_list[$i]}" =~ "$kernel_now" ]] ; then     
-                kernel_list[$i]=""
+                unset kernel_list[$i]
                 ((ok_install++))
             fi
         done
-        if [ "$ok_install" -lt "1" ] ; then
+        if [ $ok_install -lt 1 ] ; then
             red "未发现正在使用的内核，可能已经被卸载"
             yellow "按回车键继续。。。"
             read -s
@@ -1269,11 +1280,11 @@ remove_other_kernel()
         for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
         do
             if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]] ; then     
-                kernel_list_modules[$i]=""
+                unset kernel_list_modules[$i]
                 ((ok_install++))
             fi
         done
-        if [ "$ok_install" -lt "1" ] ; then
+        if [ $ok_install -lt 1 ] ; then
             red "未发现正在使用的内核，可能已经被卸载"
             yellow "按回车键继续。。。"
             read -s
@@ -1283,11 +1294,11 @@ remove_other_kernel()
         for ((i=${#kernel_list_core[@]}-1;i>=0;i--))
         do
             if [[ "${kernel_list_core[$i]}" =~ "$kernel_now" ]] ; then     
-                kernel_list_core[$i]=""
+                unset kernel_list_core[$i]
                 ((ok_install++))
             fi
         done
-        if [ "$ok_install" -lt "1" ] ; then
+        if [ $ok_install -lt 1 ] ; then
             red "未发现正在使用的内核，可能已经被卸载"
             yellow "按回车键继续。。。"
             read -s
@@ -1297,15 +1308,19 @@ remove_other_kernel()
         for ((i=${#kernel_list_devel[@]}-1;i>=0;i--))
         do
             if [[ "${kernel_list_devel[$i]}" =~ "$kernel_now" ]] ; then     
-                kernel_list_devel[$i]=""
+                unset kernel_list_devel[$i]
                 ((ok_install++))
             fi
         done
-        if [ "$ok_install" -lt "1" ] ; then
+        if [ $ok_install -lt 1 ] ; then
             red "未发现正在使用的内核，可能已经被卸载"
             yellow "按回车键继续。。。"
             read -s
             return 1
+        fi
+        if [ ${#kernel_list[@]} -eq 0 ] && [ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_core[@]} -eq 0 ] && [ ${#kernel_list_devel[@]} -eq 0 ]; then
+            yellow "没有内核可卸载"
+            return 0
         fi
         yum -y remove ${kernel_list[@]} ${kernel_list_modules[@]} ${kernel_list_core[@]} ${kernel_list_devel[@]}
     fi
