@@ -1,11 +1,4 @@
 # V2Ray-TLS+Web搭建/管理脚本
-此脚本需要一个解析到服务器的域名!!!!
-
-此脚本需要一个解析到服务器的域名!!!!
-
-此脚本需要一个解析到服务器的域名!!!!
-
-(支持cdn解析)
 
 ## 脚本特性
 
@@ -22,49 +15,37 @@
 6.使用nginx作为网站服务
 
 7.使用acme.sh自动申请域名证书
+
+## 注意事项
+1.此脚本需要一个解析到服务器的域名(支持cdn)
+
+2.有些服务器443端口被阻断，比如阿里云就有，使用这个脚本搭建的无法连接
+
+3.在不同的ssh连接工具上文字的颜色显示不一样，有的看起来非常奇怪，还请谅解（本人使用的是xshell）
  
 ## 脚本使用说明
-
 ### 1. 安装wget
-
 Debian基系统(包括Ubuntu、Debian)：
-
 ```bash
 command -v wget > /dev/null 2>&1 || apt -y install wget || (apt update && apt -y install wget)
 ```
-
 Red Hat基系统(包括CentOS)：
-
 ```bash
 command -v wget > /dev/null 2>&1 || yum -y install wget
 ```
-
 ### 2. 获取脚本
-
 ```bash
-wget --no-check-certificate "https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/V2Ray-TLS+Web-setup.sh"
+wget -O V2Ray-TLS+Web-setup.sh --no-check-certificate "https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/V2Ray-TLS+Web-setup.sh"
 ```
-
 ### 3. 增加脚本可执行权限
-
 ```bash
-chmod +x "V2Ray-TLS+Web-setup.sh"
+chmod +x V2Ray-TLS+Web-setup.sh
 ```
-
 ### 4. 执行脚本
-
 ```bash
-./"V2Ray-TLS+Web-setup.sh"
+./V2Ray-TLS+Web-setup.sh
 ```
-
 ### 5. 根据脚本提示完成安装
-
-### 6. 其他说明
-
-1.有些服务器443端口被阻断，比如阿里云就有，这个脚本搭建的无法运行。
-
-2.在不同的ssh连接工具上文字的颜色显示不一样，有的看起来非常奇怪，还请谅解（本人使用的是xshell）
-
 ## 注
 
 1.本文链接(官网)：https://github.com/kirin10000/V2Ray-TLS-Web-setup-script
