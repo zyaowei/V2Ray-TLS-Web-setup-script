@@ -161,19 +161,48 @@ EOF
     else
         echo "    return 301 https://${domain_list[0]};" >> $nginx_config
     fi
+    echo "}" >> $nginx_config
+    for ((i=0;i<${#domain_list[@]};i++))
+    do
+cat >> $nginx_config<<EOF
+server {
+    listen unix:/etc/nginx/unixsocks_temp/default.sock;
+EOF
+        if [ ${domainconfig_list[i]} -eq 1 ]; then
+            echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
+        else
+            echo "    server_name ${domain_list[i]};" >> $nginx_config
+        fi
+        echo "    root /etc/nginx/html/${domain_list[i]};" >> $nginx_config
+        if [ ${pretend_list[i]} -eq 2 ]; then
+cat >> $nginx_config<<EOF
+    location / {
+        proxy_pass https://v.qq.com;
+        proxy_set_header referer "https://v.qq.com";
+    }
+EOF
+        fi
 cat >> $nginx_config<<EOF
 }
 server {
-    listen unix:/etc/nginx/unixsocks_temp/default.sock;
-    server_name ${all_domains[@]};
-    root /etc/nginx/html/${domain_list[0]};
-}
-server {
     listen unix:/etc/nginx/unixsocks_temp/h2.sock http2;
-    server_name ${all_domains[@]};
-    root /etc/nginx/html/${domain_list[0]};
-}
 EOF
+        if [ ${domainconfig_list[i]} -eq 1 ]; then
+            echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
+        else
+            echo "    server_name ${domain_list[i]};" >> $nginx_config
+        fi
+        echo "    root /etc/nginx/html/${domain_list[i]};" >> $nginx_config
+        if [ ${pretend_list[i]} -eq 2 ]; then
+cat >> $nginx_config<<EOF
+    location / {
+        proxy_pass https://v.qq.com;
+        proxy_set_header referer "https://v.qq.com";
+    }
+EOF
+        fi
+        echo "}" >> $nginx_config
+    done
 }
 
 #获取证书
@@ -182,6 +211,8 @@ get_all_certs()
     local i
     config_nginx_init
     mv $nginx_config $nginx_config.bak
+    mv $v2ray_config $v2ray_config.bak
+    echo "{}" >> $v2ray_config
     for ((i=0;i<${#domain_list[@]};i++))
     do
 cat > $nginx_config<<EOF
@@ -200,7 +231,7 @@ EOF
             $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp
             $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp
         fi
-    if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "sleep 1s && systemctl restart nginx" --ecc; then
+    if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "sleep 1s && systemctl restart v2ray" --ecc; then
         yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
         yellow "按回车键继续。。。"
         read -s
@@ -208,21 +239,33 @@ EOF
     done
     chmod 0644 /etc/nginx/certs/*
     systemctl stop nginx
+    systemctl stop v2ray
     mv $nginx_config.bak $nginx_config
+    mv $v2ray_config.bak $v2ray_config
 }
 
 #获取配置信息 path port v2id_1 v2id_2 mode
 get_base_information()
 {
+    v2id_1=`grep id $v2ray_config | head -n 1`
+    v2id_1=${v2id_1##*' '}
+    v2id_1=${v2id_1#*'"'}
+    v2id_1=${v2id_1%'"'*}
     if [ $(grep -E "vmess|vless" $v2ray_config | wc -l) -eq 2 ]; then
         mode=1
-        port=
-        path=
-        v2id_1=
-        v2id_2=
+        port=`grep port $v2ray_config | tail -n 1`
+        port=${port##*' '}
+        port=${port%%,*}
+        path=`grep path $v2ray_config`
+        path=${path##*' '}
+        path=${path#*'"'}
+        path=${path%'"'*}
+        v2id_2=`grep id $v2ray_config | tail -n 1`
+        v2id_2=${v2id_2##*' '}
+        v2id_2=${v2id_2#*'"'}
+        v2id_2=${v2id_2%'"'*}
     else
         mode=2
-        v2id_1=""
         port=""
         path=""
         v2id_2=""
@@ -232,100 +275,25 @@ get_base_information()
 #获取域名列表
 get_domainlist()
 {
-    asdasdas
-}
-
-#配置v2ray
-config_v2ray()
-{
-cat > $v2ray_config <<EOF
-{
-    "inbounds": [
-        {
-            "port": 443,
-            "protocol": "vless",
-            "settings": {
-                "clients": [
-                    {
-                        "id": "$v2id_1",
-                        "level": 2
-                    }
-                ],
-                "fallbacks": [
-                    {
-                        "path": "$path",
-                        "dest": $port,
-                        "xver": 0
-                    },
-                    {
-                        "dest": "/etc/nginx/unixsocks_temp/default.sock",
-                        "xver": 0
-                    },
-                    {
-                        "alpn": "h2",
-                        "dest": "/etc/nginx/unixsocks_temp/h2.sock",
-                        "xver": 0
-                    }
-                ],
-                "decryption": "none"
-            },
-            "streamSettings": {
-                "network": "tcp",
-                "security": "tls",
-                "tlsSettings": {
-                    "alpn": [
-                        "h2",
-                        "http/1.1"
-                    ],
-                    "certificates": [
-                        {
-                            "certificateFile": "/etc/nginx/certs/${domain_list[0]}.cer",
-                            "keyFile": "/etc/nginx/certs/${domain_list[0]}.key"
-                        }
-                    ]
-                },
-                "sockopt": {
-                    "tcpFastOpen": true
-                }
-            }
-        },
-        {
-            "port": $port,
-            "listen": "127.0.0.1",
-            "protocol": "vmess",
-            "settings": {
-                "clients": [
-                    {
-                        "id": "$v2id_2",
-                        "level": 1,
-                        "alterId": 0
-                    }
-                ]
-            },
-            "streamSettings": {
-                "network": "ws",
-                "wsSettings": {
-                    "path": "$path"
-                },
-                "sockopt": {
-                    "tcpFastOpen": true
-                }
-            }
-        }
-    ],
-    "outbounds": [
-        {
-            "protocol": "freedom",
-            "settings": {},
-            "streamSettings": {
-                "sockopt": {
-                    "tcpFastOpen": true
-                }
-            }
-        }
-    ]
-}
-EOF
+    unset domain_list
+    domain_list=($(grep server_name $nginx_config | sed 's/;//g' | awk '!(NR%2)' | awk '{print $NF}'))
+    local line
+    local i
+    for i in ${!domain_list[@]}
+    do
+        line=`grep -n "server_name www.${domain_list[i]} ${domain_list[i]};" $nginx_config | tail -n 1 | awk -F : '{print $1}'`
+        if [ "$line" == "" ]; then
+            line=`grep -n "server_name ${domain_list[i]};" $nginx_config | tail -n 1 | awk -F : '{print $1}'`
+            domainconfig_list[i]=2
+        else
+            domainconfig_list[i]=1
+        fi
+        if awk 'NR=='"$(($line+2))"' {print $0}' $nginx_config | grep -q "location / {"; then
+            pretend_list[i]=2
+        else
+            pretend_list[i]=1
+        fi
+    done
 }
 
 #安装
@@ -411,6 +379,7 @@ install_update_v2ray_tls_web()
     ##安装依赖
     if [ $release == centos ] || [ $release == redhat ]; then
         install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
+        ##libxml2-devel非必须
     else
         if [ "$release" == "ubuntu" ] && [ "$systemVersion" == "20.04" ]; then
             install_dependence "gcc-10 g++-10"
@@ -439,9 +408,9 @@ install_update_v2ray_tls_web()
             ln -s -f /usr/bin/x86_64-linux-gnu-gcov-tool-10  /usr/bin/x86_64-linux-gnu-gcov-tool
         else
             install_dependence "gcc g++ libgoogle-perftools-dev libatomic-ops-dev libperl-dev libxslt-dev zlib1g-dev libpcre3-dev libgeoip-dev libgd-dev libxml2-dev libsctp-dev wget unzip curl make openssl cron"
+            ##libxml2-dev非必须
         fi
     fi
-    ##libxml2-devel非必须
     apt clean
     yum clean all
 
@@ -463,7 +432,7 @@ install_update_v2ray_tls_web()
     if ! make; then
         red    "nginx编译失败！"
         yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
-        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-WebSocket-TLS-Web-setup-script/issues)，感谢您的支持"
+        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
         exit 1
     fi
     if [ $update == 1 ]; then
@@ -479,7 +448,7 @@ install_update_v2ray_tls_web()
     if ! make install; then
         red    "nginx安装失败！"
         yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
-        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-WebSocket-TLS-Web-setup-script/issues)，感谢您的支持"
+        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
         exit 1
     fi
     mkdir /etc/nginx/conf.d
@@ -490,10 +459,6 @@ install_update_v2ray_tls_web()
     cd ..
     config_service_nginx
 ##安装nignx完成
-
-#安装acme.sh
-    curl https://get.acme.sh | sh
-    $HOME/.acme.sh/acme.sh --upgrade --auto-upgrade
 
 #安装v2ray
     if ! curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
@@ -512,6 +477,12 @@ install_update_v2ray_tls_web()
     fi
     systemctl enable v2ray
     systemctl stop v2ray
+
+#安装acme.sh获取证书
+    curl https://get.acme.sh | sh
+    $HOME/.acme.sh/acme.sh --upgrade --auto-upgrade
+    get_all_certs
+
     if [ $update == 0 ]; then
         path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
         path="/$path"
@@ -520,16 +491,21 @@ install_update_v2ray_tls_web()
         get_random_port
     fi
     config_v2ray
-
-    get_all_certs
     config_nginx
     if [ $update == 1 ]; then
         mv domain_backup/* /etc/nginx/html
     else
         get_webs
     fi
+    sleep 1s
     systemctl start nginx
+    sleep 1s
     systemctl start v2ray
+    if [ $update == 1 ]; then
+        green "-------------------升级完成-------------------"
+    else
+        green "-------------------安装完成-------------------"
+    fi
     echo_end
     rm -rf /temp_install_update_v2ray_tls_web
 }
@@ -594,10 +570,12 @@ readDomain()
     tyblue " 1. 404页面 (模拟网站后台)"
     green  "    说明：大型网站几乎都有使用网站后台，比如bilibili的每个视频都是由"
     green  "    另外一个域名提供的，直接访问那个域名的根目录将返回404或其他错误页面"
+    tyblue " 2. 镜像腾讯视频网站"
+    green  "    说明：是真镜像站，非链接跳转，默认为腾讯视频，搭建完成后可以自己修改，可能构成侵权"
     tyblue " 3. nextcloud登陆页面"
     green  "    说明：nextclound是开源的私人网盘服务，假装你搭建了一个私人网盘(可以换成别的自定义网站)"
     echo
-    while [[ x"$pretend" != x"1" && x"$pretend" != x"3" ]]
+    while [[ x"$pretend" != x"1" && x"$pretend" != x"2" && x"$pretend" != x"3" ]]
     do
         read -p "您的选择是：" pretend
     done
@@ -611,16 +589,19 @@ readMode()
 {
     echo -e "\n\n\n"
     tyblue "------------------------------请选安装模式------------------------------"
-    tyblue " 1. V2Ray-TCP+TLS + V2Ray-ws+TLS + Web"
+    tyblue " 1. (V2Ray-TCP+TLS) + (V2Ray-WebSocket+TLS) + Web"
     green  "    适合有时使用cdn"
-    tyblue " 2. V2Ray-ws+TLS+Web"
+    tyblue " 2. V2Ray-TCP+TLS+Web"
+    green  "    适合不使用cdn"
+    tyblue " 3. V2Ray-WebSocket+TLS+Web"
     green  "    适合一直使用cdn"
     echo
-    while [[ x"$mode" != x"1" && x"$mode" != x"2" ]]
+    mode=""
+    while [[ x"$mode" != x"1" && x"$mode" != x"2" && x"$mode" != x"3" ]]
     do
         read -p "您的选择是：" mode
     done
-    if [ $mode -eq 2 ]; then
+    if [ $mode -eq 3 ]; then
         yellow "请使用这个脚本安装：https://github.com/kirin10000/V2Ray-WebSocket-TLS-Web-setup-script"
         exit 0
     fi
@@ -1363,12 +1344,6 @@ setsshd()
 echo_end()
 {
     echo -e "\n\n\n"
-    if [ $update == 1 ]; then
-        tyblue "-------------------升级完成-------------------"
-    else
-        tyblue "-------------------安装完成-------------------"
-    fi
-    echo -e "\n\n\n"
     tyblue "-------- V2Ray-TCP+TLS+Web (不走cdn) --------"
     tyblue " 服务器类型：VLESS"
     tyblue " 地址：服务器ip"
@@ -1407,12 +1382,17 @@ echo_end()
         tyblue " 额外ID：0"
         tyblue " 加密方式：使用cdn，推荐auto;不使用cdn，推荐none"
         tyblue " 传输协议：ws"
+        tyblue " 伪装类型：none"
         tyblue " 伪装域名：空"
         tyblue " 路径：${path}"
         tyblue " 底层传输安全：tls"
         tyblue " allowInsecure：false"
         tyblue "----------------------------------------------"
         fi
+    echo
+    tyblue " 如果要更换被镜像的伪装网站"
+    tyblue " 修改$nginx_config"
+    tyblue " 将v.qq.com修改为你要镜像的网站"
     echo
     tyblue " 脚本最后更新时间：2020.08.29"
     echo
@@ -1455,6 +1435,125 @@ EOF
     systemctl enable nginx
 }
 
+#配置v2ray
+config_v2ray()
+{
+    local i
+cat > $v2ray_config <<EOF
+{
+    "inbounds": [
+        {
+            "port": 443,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "$v2id_1",
+                        "level": 2
+                    }
+                ],
+                "fallbacks": [
+EOF
+    if [ $mode -eq 1 ]; then
+cat >> $v2ray_config <<EOF
+                    {
+                        "path": "$path",
+                        "dest": $port,
+                        "xver": 0
+                    },
+EOF
+    fi
+cat >> $v2ray_config <<EOF
+                    {
+                        "dest": "/etc/nginx/unixsocks_temp/default.sock",
+                        "xver": 0
+                    },
+                    {
+                        "alpn": "h2",
+                        "dest": "/etc/nginx/unixsocks_temp/h2.sock",
+                        "xver": 0
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": [
+                        "h2",
+                        "http/1.1"
+                    ],
+                    "certificates": [
+EOF
+    for ((i=0;i<${#domain_list[@]};i++))
+    do
+cat >> $v2ray_config <<EOF
+                        {
+                            "certificateFile": "/etc/nginx/certs/${domain_list[i]}.cer",
+                            "keyFile": "/etc/nginx/certs/${domain_list[i]}.key"
+EOF
+        if (($i==${#domain_list[@]}-1)); then
+            echo "                        }" >> $v2ray_config
+        else
+            echo "                        }," >> $v2ray_config
+        fi
+    done
+cat >> $v2ray_config <<EOF
+                    ]
+                },
+                "sockopt": {
+                    "tcpFastOpen": true
+                }
+            }
+EOF
+    if [ $mode -eq 1 ]; then
+cat >> $v2ray_config <<EOF
+        },
+        {
+            "port": $port,
+            "listen": "127.0.0.1",
+            "protocol": "vmess",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "$v2id_2",
+                        "level": 1,
+                        "alterId": 0
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "ws",
+                "wsSettings": {
+                    "path": "$path"
+                },
+                "sockopt": {
+                    "tcpFastOpen": true
+                }
+            }
+        }
+EOF
+    else
+        echo "        }" >> $v2ray_config
+    fi
+cat >> $v2ray_config <<EOF
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom",
+            "settings": {},
+            "streamSettings": {
+                "sockopt": {
+                    "tcpFastOpen": true
+                }
+            }
+        }
+    ]
+}
+EOF
+}
+
 #下载nextcloud模板，用于伪装
 get_webs()
 {
@@ -1472,30 +1571,6 @@ get_webs()
             rm -rf /etc/nginx/html/${domain_list[i]}/*.zip
         fi
     done
-}
-
-#更换协议
-change_protocol()
-{
-    get_base_information
-    local old_protocol=$protocol
-    readProtocolConfig
-    if [ $old_protocol -eq $protocol ]; then
-        red "协议未更换"
-        return
-    fi
-    if [ $old_protocol -eq 3 ]; then
-        v2id=`cat /proc/sys/kernel/random/uuid`
-    fi
-    config_v2ray
-    systemctl restart v2ray
-    green "更换完成！！"
-    if [ $old_protocol -eq 3 ]; then
-        green "用户ID：$v2id"
-    fi
-    if [ $protocol -eq 3 ]; then
-        echo_end_socks
-    fi
 }
 
 #开始菜单
@@ -1549,26 +1624,37 @@ start_menu()
     else
         green  "   1. 重新安装V2Ray-TLS+Web"
     fi
-    tyblue "   2. 仅安装bbr(包含升级内核/安装bbr/bbr2/bbrplus/魔改版bbr/锐速)"
-    tyblue "   3. 仅升级V2Ray"
-    red    "   4. 卸载V2Ray-TLS+Web"
+    green  "   2. 升级V2Ray-TLS+Web"
+    tyblue "   3. 仅安装bbr(包含升级内核/安装bbr/bbr2/bbrplus/魔改版bbr/锐速)"
+    tyblue "   4. 仅升级V2Ray"
+    red    "   5. 卸载V2Ray-TLS+Web"
     echo
     tyblue " --------------启动/停止-------------"
     if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
-        tyblue "   5. 重新启动V2Ray-TLS+Web"
+        tyblue "   6. 重新启动V2Ray-TLS+Web"
     else
-        tyblue "   5. 启动V2Ray-TLS+Web"
+        tyblue "   6. 启动V2Ray-TLS+Web"
     fi
-    tyblue "   6. 停止V2Ray-TLS+Web"
+    tyblue "   7. 停止V2Ray-TLS+Web"
+    echo
+    tyblue " ----------------管理----------------"
+    tyblue "   8. 查看配置信息"
+    tyblue "   9. 重置域名"
+    tyblue "      (会覆盖原有域名配置，安装过程中域名输错了造成V2Ray无法启动可以用此选项修复)"
+    tyblue "  10. 添加域名"
+    tyblue "  11. 删除域名"
+    tyblue "  12. 修改用户ID(id)"
+    tyblue "  13. 修改路径(path)"
+    tyblue "  14. 修改安装模式(TCP/ws)"
     echo
     tyblue " ----------------其它----------------"
-    tyblue "  7. 尝试修复退格键无法使用的问题"
-    tyblue "  8. 修改dns"
-    yellow "  9. 退出脚本"
+    tyblue "  15. 尝试修复退格键无法使用的问题"
+    tyblue "  16. 修改dns"
+    yellow "  17. 退出脚本"
     echo
     echo
     choice=""
-    while [[ "$choice" != "1" && "$choice" != "2" && "$choice" != "3" && "$choice" != "4" && "$choice" != "5" && "$choice" != "6" && "$choice" != "7" && "$choice" != "8" && "$choice" != "9" ]]
+    while [[ "$choice" != "1" && "$choice" != "2" && "$choice" != "3" && "$choice" != "4" && "$choice" != "5" && "$choice" != "6" && "$choice" != "7" && "$choice" != "8" && "$choice" != "9" && "$choice" != "10" && "$choice" != "11" && "$choice" != "12" && "$choice" != "13" && "$choice" != "14" && "$choice" != "15" && "$choice" != "16" && "$choice" != "17" ]]
     do
         read -p "您的选择是：" choice
     done
@@ -1587,13 +1673,30 @@ start_menu()
         fi
         install_update_v2ray_tls_web
     elif [ $choice -eq 2 ]; then
+        if [ $is_installed == 1 ]; then
+            if [ $release == ubuntu ]; then
+                yellow "升级bbr/系统可能需要重启，重启后请再次选择'升级V2Ray-TLS+Web'"
+            else
+                yellow "升级bbr可能需要重启，重启后请再次选择'升级V2Ray-TLS+Web'"
+            fi
+            yellow "按回车键继续，或者ctrl+c中止"
+            read -s
+        else
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        rm -rf "$0"
+        wget -O "$0" "https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/V2Ray-TLS+Web-setup.sh"
+        chmod +x "$0"
+        "$0" --update
+    elif [ $choice -eq 3 ]; then
         apt -y -f install
         rm -rf /temp_install_update_v2ray_tls_web
         mkdir /temp_install_update_v2ray_tls_web
         cd /temp_install_update_v2ray_tls_web
         install_bbr
         rm -rf /temp_install_update_v2ray_tls_web
-    elif [ $choice -eq 3 ]; then
+    elif [ $choice -eq 4 ]; then
         rm -rf /temp_install_update_v2ray_tls_web
         mkdir /temp_install_update_v2ray_tls_web
         cd /temp_install_update_v2ray_tls_web
@@ -1605,7 +1708,7 @@ start_menu()
         fi
         green "----------------升级完成----------------"
         rm -rf /temp_install_update_v2ray_tls_web
-    elif [ $choice -eq 4 ]; then
+    elif [ $choice -eq 5 ]; then
         choice=""
         while [ "$choice" != "y" -a "$choice" != "n" ]
         do
@@ -1617,7 +1720,7 @@ start_menu()
         fi
         remove_v2ray_nginx
         green  "----------------V2Ray-TLS+Web已删除----------------"
-    elif [ $choice -eq 5 ]; then
+    elif [ $choice -eq 6 ]; then
         systemctl restart nginx
         systemctl restart v2ray
         if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
@@ -1625,11 +1728,186 @@ start_menu()
         else
             green "----------------V2Ray-TLS+Web已启动---------------"
         fi
-    elif [ $choice -eq 6 ]; then
+    elif [ $choice -eq 7 ]; then
         systemctl stop nginx
         systemctl stop v2ray
         green  "----------------V2Ray-TLS+Web已停止----------------"
-    elif [ $choice -eq 7 ]; then
+    elif [ $choice -eq 8 ]; then
+        get_base_information
+        get_domainlist
+        echo_end
+    elif [ $choice -eq 9 ]; then
+        if [ $is_installed == 0 ] ; then
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        readDomain
+        get_base_information
+        get_all_certs
+        get_webs
+        config_nginx
+        config_v2ray
+        sleep 1s
+        systemctl start nginx
+        sleep 1s
+        systemctl start v2ray
+        green "-------域名重置完成-------"
+        echo_end
+    elif [ $choice -eq 10 ]; then
+        if [ $is_installed == 0 ] ; then
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        get_base_information
+        get_domainlist
+        readDomain
+        get_all_certs
+        get_webs
+        config_nginx
+        config_v2ray
+        sleep 1s
+        systemctl start nginx
+        sleep 1s
+        systemctl start v2ray
+        green "-------域名添加完成-------"
+        echo_end
+    elif [ $choice -eq 11 ]; then
+        if [ $is_installed == 0 ] ; then
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        get_domainlist
+        if [ ${#domain_list[@]} -le 1 ]; then
+            red "只有一个域名"
+            exit 1
+        fi
+        tyblue "-----------------------请选择要删除的域名-----------------------"
+        for i in ${!domain_list[@]}
+        do
+            if [ ${domainconfig_list[i]} -eq 1 ]; then
+                tyblue " ${i}. www.${domain_list[i]} ${domain_list[i]}"
+            else
+                tyblue " ${i}. ${domain_list[i]}"
+            fi
+        done
+        yellow " ${#domain_list[@]}. 不删除"
+        local delete=""
+        while ! [[ $delete =~ ^[1-9][0-9]{0,}|0$ ]] || [ $delete -gt ${#domain_list[@]} ]
+        do
+            read -p "你的选择是：" delete
+        done
+        if [ $delete -eq ${#domain_list[@]} ]; then
+            exit 0
+        fi
+        rm -rf /etc/nginx/html/${domain_list[$delete]}
+        unset domain_list[$delete]
+        unset domainconfig_list[$delete]
+        unset pretend_list[$delete]
+        domain_list=(${domain_list[@]})
+        domainconfig_list=(${domainconfig_list[@]})
+        pretend_list=(${pretend_list[@]})
+        get_base_information
+        config_nginx
+        config_v2ray
+        systemctl restart nginx
+        sleep 1s
+        systemctl restart v2ray
+        green "-------删除域名完成-------"
+        echo_end
+    elif [ $choice -eq 12 ]; then
+        if [ $is_installed == 0 ] ; then
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        get_base_information
+        local flag=1
+        if [ $mode -eq 1 ]; then
+            tyblue "-------------请输入你要修改的ID-------------"
+            tyblue " 1.VLESS服务器ID(V2Ray-WebSocket+TLS)"
+            tyblue " 2.VMess服务器ID(V2Ray-TCP+TLS)"
+            echo
+            choice=""
+            while [ "$choice" != "1" -a "$choice" != "2" ]
+            do
+                read "您的选择是：" choice
+            done
+            flag=$choice
+        fi
+        local v2id="v2id_$flag"
+        tyblue "您现在的ID是：${!v2id}"
+        choice=""
+        while [ "$choice" != "y" -a "$choice" != "n" ]
+        do
+            tyblue "是否要继续?(y/n)"
+            read choice
+        done
+        if [ $choice == "n" ]; then
+            exit 0;
+        fi
+        tyblue "-------------请输入新的ID-------------"
+        read v2id
+        if [ $flag -eq 1 ]; then
+            v2id_1="$v2id"
+        else
+            v2id_2="$v2id"
+        fi
+        get_domainlist
+        config_v2ray
+        systemctl restart v2ray
+        green "更换成功！！"
+        echo_end
+    elif [ $choice -eq 13 ]; then
+        if [ $is_installed == 0 ] ; then
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        get_base_information
+        if [ $mode -eq 2 ]; then
+            red "V2Ray-TCP+Web模式没有path!!"
+            exit 0
+        fi
+        tyblue "您现在的path是：$path"
+        choice=""
+        while [ "$choice" != "y" -a "$choice" != "n" ]
+        do
+            tyblue "是否要继续?(y/n)"
+            read choice
+        done
+        if [ $choice == "n" ]; then
+                exit 0
+        fi
+        local temp_old_path="$path"
+        tyblue "---------------请输入新的path(带\"/\")---------------"
+        read path
+        get_domainlist
+        config_v2ray
+        systemctl restart v2ray
+        green "更换成功！！"
+        echo_end
+    elif [ $choice -eq 14 ]; then
+        if [ $is_installed == 0 ] ; then
+            red "请先安装V2Ray-TLS+Web！！"
+            exit 1
+        fi
+        get_base_information
+        get_domainlist
+        local old_mode=$mode
+        readMode
+        if [ $mode -eq $old_mode ]; then
+            red "模式未更换"
+            exit 0
+        fi
+        if [ $old_mode -eq 2 ]; then
+            path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
+            path="/$path"
+            v2id_2=`cat /proc/sys/kernel/random/uuid`
+            get_random_port
+        fi
+        config_v2ray
+        systemctl restart v2ray
+        green "更换成功！！"
+        echo_end
+    elif [ $choice -eq 15 ]; then
         echo
         yellow "尝试修复退格键异常问题，退格键正常请不要修复"
         yellow "按回车键继续或按Ctrl+c退出"
@@ -1642,7 +1920,7 @@ start_menu()
         green "修复完成！！"
         sleep 1s
         start_menu
-    elif [ $choice -eq 8 ]; then
+    elif [ $choice -eq 16 ]; then
         change_dns
     fi
 }
@@ -1678,5 +1956,5 @@ if ! [ "$1" == "--update" ]; then
     start_menu
 else
     update=1
-    install_update_v2ray_tls
+    install_update_v2ray_tls_web
 fi
