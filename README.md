@@ -1,7 +1,5 @@
 # V2Ray-TLS+Web搭建/管理脚本
-
 ## 脚本特性
-
 1.支持 (V2Ray-TCP+TLS) + (V2Ray-ws+TLS) + Web
 
 2.集成 多版本bbr/锐速 安装选项
@@ -15,14 +13,12 @@
 6.使用nginx作为网站服务
 
 7.使用acme.sh自动申请域名证书
-
 ## 注意事项
 1.此脚本需要一个解析到服务器的域名(支持cdn)
 
 2.有些服务器443端口被阻断，比如阿里云就有，使用这个脚本搭建的无法连接
 
 3.在不同的ssh连接工具上文字的颜色显示不一样，有的看起来非常奇怪，还请谅解（本人使用的是xshell）
- 
 ## 脚本使用说明
 ### 1. 安装wget
 Debian基系统(包括Ubuntu、Debian)：
@@ -47,7 +43,6 @@ chmod +x V2Ray-TLS+Web-setup.sh
 ```
 ### 5. 根据脚本提示完成安装
 ## 注
-
 1.本文链接(官网)：https://github.com/kirin10000/V2Ray-TLS-Web-setup-script
 
 2.参考教程：https://www.v2fly.org/config/overview.html https://guide.v2fly.org/
