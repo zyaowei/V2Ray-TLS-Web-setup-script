@@ -1887,7 +1887,7 @@ start_menu()
             stty erase '^?'
         fi
         green "修复完成！！"
-        sleep 1s
+        sleep 2s
         start_menu
     elif [ $choice -eq 16 ]; then
         change_dns
