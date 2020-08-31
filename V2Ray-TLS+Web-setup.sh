@@ -890,8 +890,8 @@ uninstall_firewall()
     pkill AliYunDun*
     service aegis stop
     rm -rf /etc/init.d/aegis
-    rm -rf $(find / -name *aliyun*)
-    rm -rf $(find / -name *CmsGoAgent*)
+    rm -rf $(find / -iname *aliyun* 2>/dev/null)
+    rm -rf $(find / -iname *CmsGoAgent* 2>/dev/null)
 }
 
 #卸载v2ray和nginx
