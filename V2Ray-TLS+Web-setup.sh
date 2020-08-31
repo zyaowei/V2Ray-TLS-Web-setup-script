@@ -501,7 +501,6 @@ install_update_v2ray_tls_web()
     fi
     sleep 1s
     systemctl start nginx
-    sleep 1s
     systemctl start v2ray
     if [ $update == 1 ]; then
         green "-------------------升级完成-------------------"
@@ -1395,6 +1394,7 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
+ExecStartPre=rm -rf /etc/nginx/unixsocks_temp/default.sock /etc/nginx/unixsocks_temp/h2.sock
 ExecStart=/etc/nginx/sbin/nginx
 ExecStop=/etc/nginx/sbin/nginx -s stop
 PrivateTmp=true
@@ -1693,8 +1693,6 @@ start_menu()
         remove_v2ray_nginx
         green  "----------------V2Ray-TLS+Web已删除----------------"
     elif [ $choice -eq 6 ]; then
-        rm -rf /etc/nginx/unixsocks_temp/default.sock
-        rm -rf /etc/nginx/unixsocks_temp/h2.sock
         systemctl restart nginx
         systemctl restart v2ray
         if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
@@ -1723,7 +1721,6 @@ start_menu()
         config_v2ray
         sleep 1s
         systemctl start nginx
-        sleep 1s
         systemctl start v2ray
         green "-------域名重置完成-------"
         echo_end
@@ -1741,7 +1738,6 @@ start_menu()
         config_v2ray
         sleep 1s
         systemctl start nginx
-        sleep 1s
         systemctl start v2ray
         green "-------域名添加完成-------"
         echo_end
@@ -1784,7 +1780,6 @@ start_menu()
         config_nginx
         config_v2ray
         systemctl restart nginx
-        sleep 1s
         systemctl restart v2ray
         green "-------删除域名完成-------"
         echo_end
