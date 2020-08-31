@@ -238,7 +238,7 @@ EOF
         else
             local temp="chown -R nobody:nobody /etc/nginx/certs"
         fi
-        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "sleep 1s && systemctl restart v2ray && $temp" --ecc; then
+        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "sleep 1s && $temp && systemctl restart v2ray" --ecc; then
             yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
             yellow "按回车键继续。。。"
             read -s
