@@ -647,7 +647,7 @@ http {
     #tcp_nopush     on;
 
     #keepalive_timeout  0;
-    keepalive_timeout  1200s;
+    keepalive_timeout  65;
 
     #gzip  on;
 
