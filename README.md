@@ -4,7 +4,7 @@
 
 2.集成 多版本bbr/锐速 安装选项
  
-3.支持多种系统(Ubuntu CentOS Debian ...) 
+3.支持多种系统(Ubuntu CentOS Debian Deepin ...) 
 
 4.集成删除阿里云盾功能(仅对阿里云的服务器有效)
 
@@ -16,7 +16,7 @@
 
 2.有些服务器443端口被阻断，使用这个脚本搭建的无法连接
 
-3.在不同的ssh连接工具上文字的颜色显示不一样，有的看起来非常奇怪，还请谅解（本人使用的是xshell）
+3.在不同的ssh连接工具上文字的颜色显示不一样，有的看起来非常奇怪，还请谅解(本人使用的是xshell)
 ## 脚本使用说明
 ### 1. 安装wget
 Debian基系统(包括Ubuntu、Debian)：
@@ -57,7 +57,7 @@ chmod +x V2Ray-TLS+Web-setup.sh
 
 4.bbr脚本来自：https://github.com/teddysun/across/blob/master/bbr.sh
 
-5.bbr2脚本来自：https://github.com/yeyingorg/bbr2.sh (ubuntu debian) https://github.com/jackjieYYY/bbr2 (centos)
+5.bbr2脚本来自：https://github.com/yeyingorg/bbr2.sh (Ubuntu Debian) https://github.com/jackjieYYY/bbr2 (CentOS)
 
 6.bbrplus脚本来自：https://github.com/chiakge/Linux-NetSpeed
 
