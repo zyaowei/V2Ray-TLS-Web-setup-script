@@ -29,7 +29,7 @@ command -v wget > /dev/null 2>&1 || yum -y install wget
 ```
 ### 2. 获取脚本
 ```bash
-wget -O V2Ray-TLS+Web-setup.sh --no-check-certificate "https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/V2Ray-TLS+Web-setup.sh"
+wget -O V2Ray-TLS+Web-setup.sh --no-check-certificate https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/V2Ray-TLS+Web-setup.sh
 ```
 ### 3. 增加脚本可执行权限
 ```bash
