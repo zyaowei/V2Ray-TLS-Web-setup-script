@@ -4,7 +4,7 @@
 
 2.集成 多版本bbr/锐速 安装选项
  
-3.支持多种系统(Ubuntu CentOS Debian Deepin ...) 
+3.支持多种系统(Ubuntu CentOS Debian deepin ...) 
 
 4.集成删除阿里云盾功能(仅对阿里云的服务器有效)
 
@@ -19,7 +19,7 @@
 3.在不同的ssh连接工具上文字的颜色显示不一样，有的看起来非常奇怪，还请谅解(本人使用的是xshell)
 ## 脚本使用说明
 ### 1. 安装wget
-Debian基系统(包括Ubuntu、Debian)：
+Debian基系统(包括Ubuntu、Debian、deepin)：
 ```bash
 command -v wget > /dev/null 2>&1 || apt -y install wget || (apt update && apt -y install wget)
 ```
