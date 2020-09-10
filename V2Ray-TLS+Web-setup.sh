@@ -889,13 +889,17 @@ uninstall_firewall()
     rm -rf $(find / -name *CmsGoAgent*)
     rm -rf /usr/local/aegis
     rm -rf /usr/local/cloudmonitor
-    pkill CmsGoAgent
-    pkill aliyun-service
-    pkill AliYunDun*
+    pkill -9 CmsGoAgent
+    pkill -9 aliyun-service
+    pkill -9 AliYunDun
     service aegis stop
     rm -rf /etc/init.d/aegis
     rm -rf $(find / -iname *aliyun* 2>/dev/null)
     rm -rf $(find / -iname *CmsGoAgent* 2>/dev/null)
+    pkill -9 YDService
+    pkill -9 YDLive
+    pkill -9 barad_agent
+    rm -rf /usr/local/qcloud
 }
 
 #卸载v2ray和nginx
