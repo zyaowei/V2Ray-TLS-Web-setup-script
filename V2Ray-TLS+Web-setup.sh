@@ -898,6 +898,7 @@ uninstall_firewall()
     rm -rf $(find / -iname *CmsGoAgent* 2>/dev/null)
     pkill -9 YDService
     pkill -9 YDLive
+    pkill -9 sgagent
     pkill -9 barad_agent
     rm -rf /usr/local/qcloud
 }
