@@ -238,7 +238,7 @@ EOF
         else
             local temp="chown -R nobody:nobody /etc/nginx/certs"
         fi
-        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "sleep 1s && $temp && systemctl restart v2ray" --ecc; then
+        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "$temp && sleep 1s && systemctl restart v2ray" --ecc; then
             yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
             yellow "按回车键继续。。。"
             read -s
@@ -359,7 +359,6 @@ install_update_v2ray_tls_web()
     systemctl stop v2ray
     uninstall_firewall
     doupdate
-    uninstall_firewall
     if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf ; then
         echo ' ' >> /etc/sysctl.conf
         echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/sysctl.conf
@@ -878,15 +877,17 @@ doupdate()
 #删除防火墙和阿里云盾
 uninstall_firewall()
 {
+    green "正在删除防火墙。。。"
     ufw disable
     apt -y purge firewalld
     apt -y purge ufw
-    apt -y purge aliyun-assist
-    yum -y remove aliyun_assist
     systemctl disable firewalld
     yum -y remove firewalld
-    rm -rf $(find / -name *aliyun*)
-    rm -rf $(find / -name *CmsGoAgent*)
+    green "正在删除阿里云盾和腾讯云盾 (仅对阿里云和腾讯云服务器有效)。。。"
+    apt -y purge aliyun-assist
+    yum -y remove aliyun_assist
+    rm -rf $(find / -iname *aliyun* 2>/dev/null)
+    rm -rf $(find / -iname *CmsGoAgent* 2>/dev/null)
     rm -rf /usr/local/aegis
     rm -rf /usr/local/cloudmonitor
     pkill -9 CmsGoAgent
@@ -894,13 +895,11 @@ uninstall_firewall()
     pkill -9 AliYunDun
     service aegis stop
     rm -rf /etc/init.d/aegis
-    rm -rf $(find / -iname *aliyun* 2>/dev/null)
-    rm -rf $(find / -iname *CmsGoAgent* 2>/dev/null)
+    rm -rf /usr/local/qcloud
     pkill -9 YDService
     pkill -9 YDLive
     pkill -9 sgagent
     pkill -9 barad_agent
-    rm -rf /usr/local/qcloud
 }
 
 #卸载v2ray和nginx
@@ -1403,7 +1402,7 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
-ExecStartPre=rm -rf /etc/nginx/unixsocks_temp/default.sock /etc/nginx/unixsocks_temp/h2.sock
+ExecStartPre=rm -rf /etc/nginx/unixsocks_temp/*.sock
 ExecStart=/etc/nginx/sbin/nginx
 ExecStop=/etc/nginx/sbin/nginx -s stop
 PrivateTmp=true
@@ -1499,8 +1498,7 @@ cat >> $v2ray_config <<EOF
                 "clients": [
                     {
                         "id": "$v2id_2",
-                        "level": 1,
-                        "alterId": 0
+                        "level": 1
                     }
                 ]
             },
