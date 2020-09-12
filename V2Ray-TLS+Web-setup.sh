@@ -174,7 +174,7 @@ get_all_certs()
 {
     local i
     config_nginx_init
-    mv $nginx_config $nginx_config.bak
+    mv $nginx_config $nginx_config.bak 2>/dev/null
     mv $v2ray_config $v2ray_config.bak
     echo "{}" >> $v2ray_config
     for ((i=0;i<${#domain_list[@]};i++))
@@ -186,7 +186,7 @@ server {
     root /etc/nginx/html/${domain_list[i]};
 }
 EOF
-        sleep 1s
+        sleep 2s
         systemctl restart nginx
         if [ ${domainconfig_list[i]} -eq 1 ]; then
             if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
@@ -202,7 +202,7 @@ EOF
         else
             local temp="chown -R nobody:nobody /etc/nginx/certs"
         fi
-        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "$temp && sleep 1s && systemctl restart v2ray" --ecc; then
+        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
             yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
             yellow "按回车键继续。。。"
             read -s
@@ -210,7 +210,7 @@ EOF
     done
     systemctl stop nginx
     systemctl stop v2ray
-    mv $nginx_config.bak $nginx_config
+    mv $nginx_config.bak $nginx_config 2>/dev/null
     mv $v2ray_config.bak $v2ray_config
 }
 
@@ -340,8 +340,8 @@ install_update_v2ray_tls_web()
         readDomain
         readMode
     else
-        get_domainlist
         get_base_information
+        get_domainlist
     fi
     ##安装依赖
     if [ $release == centos ] || [ $release == redhat ]; then
@@ -454,11 +454,11 @@ install_update_v2ray_tls_web()
     config_v2ray
     config_nginx
     if [ $update == 1 ]; then
-        mv "${temp_dir}/domain_backup/"* /etc/nginx/html
+        mv "${temp_dir}/domain_backup/"* /etc/nginx/html 2>/dev/null
     else
         get_webs
     fi
-    sleep 1s
+    sleep 2s
     systemctl start nginx
     systemctl start v2ray
     if [ $update == 1 ]; then
@@ -1707,7 +1707,7 @@ start_menu()
         get_webs
         config_nginx
         config_v2ray
-        sleep 1s
+        sleep 2s
         systemctl start nginx
         systemctl start v2ray
         green "-------域名重置完成-------"
@@ -1720,14 +1720,14 @@ start_menu()
         get_base_information
         get_domainlist
         enter_temp_dir
-        backup_domains_web
+        backup_domains_web cp
         readDomain
         get_all_certs
         get_webs
-        mv "${temp_dir}/domain_backup/"* /etc/nginx/html
+        mv "${temp_dir}/domain_backup/"* /etc/nginx/html 2>/dev/null
         config_nginx
         config_v2ray
-        sleep 1s
+        sleep 2s
         systemctl start nginx
         systemctl start v2ray
         green "-------域名添加完成-------"
@@ -1738,6 +1738,7 @@ start_menu()
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
+        get_base_information
         get_domainlist
         if [ ${#domain_list[@]} -le 1 ]; then
             red "只有一个域名"
@@ -1768,7 +1769,6 @@ start_menu()
         domain_list=(${domain_list[@]})
         domainconfig_list=(${domainconfig_list[@]})
         pretend_list=(${pretend_list[@]})
-        get_base_information
         config_nginx
         config_v2ray
         systemctl restart nginx
@@ -1879,7 +1879,7 @@ start_menu()
             stty erase '^?'
         fi
         green "修复完成！！"
-        sleep 2s
+        sleep 3s
         start_menu
     elif [ $choice -eq 16 ]; then
         change_dns
@@ -1927,7 +1927,11 @@ backup_domains_web()
     mkdir "${temp_dir}/domain_backup"
     for i in ${!domain_list[@]}
     do
-        mv /etc/nginx/html/${domain_list[i]} "${temp_dir}/domain_backup"
+        if [ "$1" == "cp" ]; then
+            cp -rf /etc/nginx/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
+        else
+            mv /etc/nginx/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
+        fi
     done
 }
 
