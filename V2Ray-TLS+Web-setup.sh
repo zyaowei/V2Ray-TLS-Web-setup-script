@@ -1329,7 +1329,7 @@ setsshd()
 echo_end()
 {
     echo -e "\n\n\n"
-    tyblue "-------- V2Ray-TCP+TLS+Web (不走cdn) --------"
+    tyblue "---------------- VLESS+TCP+TLS+Web (不走cdn) -----------------"
     tyblue " 服务器类型：VLESS"
     tyblue " 地址：服务器ip"
     tyblue " 端口：443"
@@ -1346,10 +1346,10 @@ echo_end()
     tyblue " 路径：空"
     tyblue " 底层传输安全：tls"
     tyblue " allowInsecure：false"
-    tyblue "----------------------------------------------"
+    tyblue "--------------------------------------------------------------"
     if [ $mode -eq 1 ]; then
         echo
-        tyblue "------ V2Ray-ws+TLS+Web (如果有cdn，会走cdn)------"
+        tyblue "------ VMessAEAD+WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
         tyblue " 服务器类型：VMess"
         if [ ${#all_domains[@]} -eq 1 ]; then
             tyblue " 地址：${all_domains[@]}"
@@ -1366,8 +1366,11 @@ echo_end()
         tyblue " 路径：${path}"
         tyblue " 底层传输安全：tls"
         tyblue " allowInsecure：false"
-        tyblue "----------------------------------------------"
-        fi
+        tyblue "--------------------------------------------------------------"
+        echo
+        green  "不使用cdn推荐第一种连接方式"
+        yellow "使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以开启VMessAEAD"
+    fi
     echo
     tyblue " 如果要更换被镜像的伪装网站"
     tyblue " 修改$nginx_config"
@@ -1799,8 +1802,8 @@ start_menu()
         local flag=1
         if [ $mode -eq 1 ]; then
             tyblue "-------------请输入你要修改的ID-------------"
-            tyblue " 1.VLESS服务器ID(V2Ray-WebSocket+TLS)"
-            tyblue " 2.VMess服务器ID(V2Ray-TCP+TLS)"
+            tyblue " 1.VLESS服务器ID(V2Ray-TCP+TLS)"
+            tyblue " 2.VMess服务器ID(V2Ray-WebSocket+TLS)"
             echo
             choice=""
             while [ "$choice" != "1" -a "$choice" != "2" ]
