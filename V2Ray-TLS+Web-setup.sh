@@ -1368,15 +1368,15 @@ echo_end()
         tyblue " allowInsecure：false"
         tyblue "--------------------------------------------------------------"
         echo
-        green  "不使用cdn推荐第一种连接方式"
-        yellow "使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以开启VMessAEAD"
+        green  " 不使用cdn推荐第一种连接方式"
+        yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
     fi
     echo
     tyblue " 如果要更换被镜像的伪装网站"
     tyblue " 修改$nginx_config"
     tyblue " 将v.qq.com修改为你要镜像的网站"
     echo
-    tyblue " 脚本最后更新时间：2020.08.29"
+    tyblue " 脚本最后更新时间：2020.09.12"
     echo
     red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
     tyblue " 2020.08"
