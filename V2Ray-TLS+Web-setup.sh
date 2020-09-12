@@ -881,15 +881,23 @@ uninstall_firewall()
     ufw disable
     apt -y purge firewalld
     apt -y purge ufw
+    systemctl stop firewalld
     systemctl disable firewalld
     yum -y remove firewalld
     green "正在删除阿里云盾和腾讯云盾 (仅对阿里云和腾讯云服务器有效)。。。"
 #阿里云盾
-    systemctl stop CmsGoAgent
-    systemctl disable CmsGoAgent
-    rm -rf /usr/local/cloudmonitor
-    rm -rf /etc/systemd/system/CmsGoAgent.service
-    systemctl daemon-reload
+    if [ $release == ubuntu ] || [ $release == debian ]; then
+        systemctl stop CmsGoAgent
+        systemctl disable CmsGoAgent
+        rm -rf /usr/local/cloudmonitor
+        rm -rf /etc/systemd/system/CmsGoAgent.service
+        systemctl daemon-reload
+    else
+        systemctl stop cloudmonitor
+        /etc/rc.d/init.d/cloudmonitor remove
+        rm -rf /usr/local/cloudmonitor
+        systemctl daemon-reload
+    fi
 
     systemctl stop aliyun
     systemctl disable aliyun
@@ -915,6 +923,7 @@ uninstall_firewall()
     pkill -9 YDService
     pkill -9 YDLive
     pkill -9 sgagent
+    pkill -9 /usr/local/qcloud
     pkill -9 barad_agent
     rm -rf /usr/local/qcloud
 }
@@ -1020,7 +1029,7 @@ get_kernel_info()
     do
         your_kernel_version=${your_kernel_version%.*}
     done
-    if [ $release == ubuntu ] || [ $release == debian ] ; then
+    if [ $release == ubuntu ] || [ $release == debian ]; then
         local rc_version=`uname -r | cut -d - -f 2`
         if [[ $rc_version =~ "rc" ]] ; then
             rc_version=${rc_version##*'rc'}
