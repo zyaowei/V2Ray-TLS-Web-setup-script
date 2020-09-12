@@ -3,6 +3,7 @@ nginx_version="nginx-1.19.2"
 openssl_version="openssl-openssl-3.0.0-alpha6"
 v2ray_config="/usr/local/etc/v2ray/config.json"
 nginx_config="/etc/nginx/conf.d/v2ray.conf"
+temp_dir="/temp_install_update_v2ray_tls_web"
 
 unset domain_list
 unset domainconfig_list
@@ -124,18 +125,12 @@ get_all_domains()
 config_nginx()
 {
     local i
+    get_all_domains
 cat > $nginx_config<<EOF
 server {
     listen 80 fastopen=100 reuseport default_server;
     listen [::]:80 fastopen=100 reuseport default_server;
-EOF
-    if [ ${domainconfig_list[0]} -eq 1 ]; then
-        echo "    return 301 https://www.${domain_list[0]};" >> $nginx_config
-    else
-        echo "    return 301 https://${domain_list[0]};" >> $nginx_config
-    fi
-    get_all_domains
-cat >> $nginx_config<<EOF
+    return 301 https://${all_domains[0]};
 }
 server {
     listen 80;
@@ -145,46 +140,15 @@ server {
 }
 server {
     listen unix:/etc/nginx/unixsocks_temp/default.sock default_server;
-EOF
-    if [ ${domainconfig_list[0]} -eq 1 ]; then
-        echo "    return 301 https://www.${domain_list[0]};" >> $nginx_config
-    else
-        echo "    return 301 https://${domain_list[0]};" >> $nginx_config
-    fi
-cat >> $nginx_config<<EOF
-}
-server {
     listen unix:/etc/nginx/unixsocks_temp/h2.sock http2 default_server;
+    return 301 https://${all_domains[0]};
+}
 EOF
-    if [ ${domainconfig_list[0]} -eq 1 ]; then
-        echo "    return 301 https://www.${domain_list[0]};" >> $nginx_config
-    else
-        echo "    return 301 https://${domain_list[0]};" >> $nginx_config
-    fi
-    echo "}" >> $nginx_config
     for ((i=0;i<${#domain_list[@]};i++))
     do
 cat >> $nginx_config<<EOF
 server {
     listen unix:/etc/nginx/unixsocks_temp/default.sock;
-EOF
-        if [ ${domainconfig_list[i]} -eq 1 ]; then
-            echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
-        else
-            echo "    server_name ${domain_list[i]};" >> $nginx_config
-        fi
-        echo "    root /etc/nginx/html/${domain_list[i]};" >> $nginx_config
-        if [ ${pretend_list[i]} -eq 2 ]; then
-cat >> $nginx_config<<EOF
-    location / {
-        proxy_pass https://v.qq.com;
-        proxy_set_header referer "https://v.qq.com";
-    }
-EOF
-        fi
-cat >> $nginx_config<<EOF
-}
-server {
     listen unix:/etc/nginx/unixsocks_temp/h2.sock http2;
 EOF
         if [ ${domainconfig_list[i]} -eq 1 ]; then
@@ -282,7 +246,7 @@ get_base_information()
 get_domainlist()
 {
     unset domain_list
-    domain_list=($(grep server_name $nginx_config | sed 's/;//g' | awk '!(NR%2)' | awk '{print $NF}'))
+    domain_list=($(grep server_name $nginx_config | sed 's/;//g' | awk 'NR>1 {print $NF}'))
     local line
     local i
     for i in ${!domain_list[@]}
@@ -368,9 +332,7 @@ install_update_v2ray_tls_web()
         echo 'net.ipv4.tcp_fastopen = 3' >> /etc/sysctl.conf
         sysctl -p
     fi
-    rm -rf /temp_install_update_v2ray_tls_web
-    mkdir /temp_install_update_v2ray_tls_web
-    cd /temp_install_update_v2ray_tls_web
+    enter_temp_dir
     install_bbr
     apt -y -f install
     #读取域名
@@ -441,13 +403,7 @@ install_update_v2ray_tls_web()
         exit 1
     fi
     if [ $update == 1 ]; then
-        mkdir ../domain_backup
-        for i in ${!domain_list[@]}
-        do
-            if [ ${pretend_list[i]} == 1 ]; then
-                mv /etc/nginx/html/${domain_list[i]} ../domain_backup
-            fi
-        done
+        backup_domains_web
     fi
     remove_v2ray_nginx
     if ! make install; then
@@ -498,7 +454,7 @@ install_update_v2ray_tls_web()
     config_v2ray
     config_nginx
     if [ $update == 1 ]; then
-        mv domain_backup/* /etc/nginx/html
+        mv "${temp_dir}/domain_backup/"* /etc/nginx/html
     else
         get_webs
     fi
@@ -511,7 +467,7 @@ install_update_v2ray_tls_web()
         green "-------------------安装完成-------------------"
     fi
     echo_end
-    rm -rf /temp_install_update_v2ray_tls_web
+    rm -rf "$temp_dir"
 }
 
 #读取域名
@@ -1699,15 +1655,11 @@ start_menu()
         "$0" --update
     elif [ $choice -eq 3 ]; then
         apt -y -f install
-        rm -rf /temp_install_update_v2ray_tls_web
-        mkdir /temp_install_update_v2ray_tls_web
-        cd /temp_install_update_v2ray_tls_web
+        enter_temp_dir
         install_bbr
-        rm -rf /temp_install_update_v2ray_tls_web
+        rm -rf "$temp_dir"
     elif [ $choice -eq 4 ]; then
-        rm -rf /temp_install_update_v2ray_tls_web
-        mkdir /temp_install_update_v2ray_tls_web
-        cd /temp_install_update_v2ray_tls_web
+        enter_temp_dir
         if ! curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
             yellow "获取V2Ray安装脚本失败"
         fi
@@ -1715,7 +1667,7 @@ start_menu()
                 yellow "V2Ray更新失败"
         fi
         green "----------------升级完成----------------"
-        rm -rf /temp_install_update_v2ray_tls_web
+        rm -rf "$temp_dir"
     elif [ $choice -eq 5 ]; then
         choice=""
         while [ "$choice" != "y" -a "$choice" != "n" ]
@@ -1767,9 +1719,12 @@ start_menu()
         fi
         get_base_information
         get_domainlist
+        enter_temp_dir
+        backup_domains_web
         readDomain
         get_all_certs
         get_webs
+        mv "${temp_dir}/domain_backup/"* /etc/nginx/html
         config_nginx
         config_v2ray
         sleep 1s
@@ -1777,6 +1732,7 @@ start_menu()
         systemctl start v2ray
         green "-------域名添加完成-------"
         echo_end
+        rm -rf "$temp_dir"
     elif [ $choice -eq 11 ]; then
         if [ $is_installed == 0 ] ; then
             red "请先安装V2Ray-TLS+Web！！"
@@ -1847,7 +1803,7 @@ start_menu()
             read choice
         done
         if [ $choice == "n" ]; then
-            exit 0;
+            exit 0
         fi
         tyblue "-------------请输入新的ID-------------"
         read v2id
@@ -1879,7 +1835,7 @@ start_menu()
             read choice
         done
         if [ $choice == "n" ]; then
-                exit 0
+            exit 0
         fi
         local temp_old_path="$path"
         tyblue "---------------请输入新的path(带\"/\")---------------"
@@ -1954,6 +1910,25 @@ change_dns()
         fi
         green "修改完成！！"
     fi
+}
+
+#进入工作目录
+enter_temp_dir()
+{
+    rm -rf "$temp_dir"
+    mkdir "$temp_dir"
+    cd "$temp_dir"
+}
+
+#备份域名伪装网站
+backup_domains_web()
+{
+    local i
+    mkdir "${temp_dir}/domain_backup"
+    for i in ${!domain_list[@]}
+    do
+        mv /etc/nginx/html/${domain_list[i]} "${temp_dir}/domain_backup"
+    done
 }
 
 if ! [ "$1" == "--update" ]; then
