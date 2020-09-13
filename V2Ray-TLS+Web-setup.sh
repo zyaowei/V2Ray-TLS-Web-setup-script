@@ -1790,7 +1790,7 @@ start_menu()
             choice=""
             while [ "$choice" != "1" -a "$choice" != "2" ]
             do
-                read "您的选择是：" choice
+                read -p "您的选择是：" choice
             done
             flag=$choice
         fi
