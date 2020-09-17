@@ -1016,8 +1016,8 @@ install_bbr()
     else
         tyblue " 2. 升级内核启用bbr"
     fi
-    yellow " 3. 启用bbr2(需更换第三方内核)"
-    yellow " 4. 启用bbrplus/魔改版bbr/锐速(需更换第三方内核)"
+    tyblue " 3. 启用bbr2(需更换第三方内核)"
+    tyblue " 4. 启用bbrplus/bbr魔改版/暴力bbr魔改版/锐速(需更换第三方内核)"
     tyblue " 5. 卸载多余内核"
     tyblue " 6. 退出bbr安装"
     tyblue "------------------关于安装bbr加速的说明------------------"
@@ -1036,9 +1036,14 @@ install_bbr()
         red "     否，需升级内核"
     fi
     tyblue "  bbr启用状态："
-    if sysctl net.ipv4.tcp_congestion_control | grep -q bbr ; then
+    if sysctl net.ipv4.tcp_congestion_control | grep -Eq "bbr|nanqinlang|tsunami"; then
         local bbr_info=`sysctl net.ipv4.tcp_congestion_control`
         bbr_info=${bbr_info#*=}
+        if [ $bbr_info == nanqinlang ]; then
+            bbr_info="暴力bbr魔改版"
+        elif [ $bbr_info == tsunami ]; then
+            bbr_info="bbr魔改版"
+        fi
         green "   正在使用：${bbr_info}"
     else
         red "   bbr未启用！！"
@@ -1062,14 +1067,6 @@ install_bbr()
                 read -s
                 echo
             fi
-            tyblue "------------注意事项------------"
-            yellow " 若最新版内核安装失败，可以尝试："
-            yellow "  1. 更换Ubuntu系统"
-            yellow "  2. 更换更新版本的系统"
-            yellow "  3. 选择2选项，或者使用bbr2/bbrplus"
-            echo
-            yellow " 按回车键以继续。。。"
-            read -s
             sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
             sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
             echo 'net.core.default_qdisc = fq' >> /etc/sysctl.conf
@@ -1139,7 +1136,7 @@ install_bbr()
         4)
             rm -rf tcp.sh
             if ! wget -O tcp.sh "https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh" ; then
-                red    "获取bbrplus脚本失败"
+                red    "获取脚本失败"
                 yellow "按回车键继续或者按ctrl+c终止"
                 read -s
             fi
