@@ -1483,7 +1483,8 @@ cat >> $v2ray_config <<EOF
                         "id": "$v2id_2",
                         "level": 1
                     }
-                ]
+                ],
+                "disableInsecureEncryption": true
             },
             "streamSettings": {
                 "network": "ws",
@@ -1681,10 +1682,15 @@ start_menu()
     elif [ $choice -eq 6 ]; then
         systemctl restart nginx
         systemctl restart v2ray
-        if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
-            green "--------------------------重启完成--------------------------"
+        sleep 1s
+        if ! systemctl is-active v2ray > /dev/null 2>&1 || ! systemctl is-active nginx > /dev/null 2>&1; then
+            red "启动失败！！"
         else
-            green "----------------V2Ray-TLS+Web已启动---------------"
+            if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
+                green "--------------------------重启完成--------------------------"
+            else
+                green "----------------V2Ray-TLS+Web已启动---------------"
+            fi
         fi
     elif [ $choice -eq 7 ]; then
         systemctl stop nginx
