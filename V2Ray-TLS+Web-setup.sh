@@ -1383,9 +1383,9 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
-ExecStartPre=/usr/bin/rm -rf /etc/nginx/unixsocks_temp
-ExecStartPre=/usr/bin/mkdir /etc/nginx/unixsocks_temp
-ExecStartPre=/usr/bin/chmod 755 /etc/nginx/unixsocks_temp
+ExecStartPre=/bin/rm -rf /etc/nginx/unixsocks_temp
+ExecStartPre=/bin/mkdir /etc/nginx/unixsocks_temp
+ExecStartPre=/bin/chmod 755 /etc/nginx/unixsocks_temp
 ExecStart=/etc/nginx/sbin/nginx
 ExecStop=/etc/nginx/sbin/nginx -s stop
 PrivateTmp=true
