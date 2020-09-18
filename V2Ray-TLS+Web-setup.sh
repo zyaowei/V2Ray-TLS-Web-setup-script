@@ -63,13 +63,13 @@ elif ! command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; the
     exit 1
 fi
 
-if lsb_release -a 2>&1 | grep -qi "ubuntu" || cat /etc/lsb-release | grep -qi "ubuntu" || cat /etc/os-release | grep -qi "ubuntu" || cat /etc/issue | grep -qi "ubuntu"; then
+if lsb_release -a 2>/dev/null | grep -qi "ubuntu" || cat /etc/lsb-release 2>/dev/null | grep -qi "ubuntu" || cat /etc/os-release 2>/dev/null | grep -qi "ubuntu" || cat /etc/issue 2>/dev/null | grep -qi "ubuntu"; then
     release="ubuntu"
-elif lsb_release -a 2>&1 | grep -qi "debian" || cat /etc/issue | grep -qi "debian" || cat /proc/version | grep -qi "debian" || command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
+elif lsb_release -a 2>/dev/null | grep -qi "debian" || cat /etc/issue 2>/dev/null | grep -qi "debian" || cat /proc/version 2>/dev/null | grep -qi "debian" || command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
     release="debian"
-elif lsb_release -a 2>&1 | grep -qi "centos" || cat /etc/issue | grep -qi "centos" || cat /proc/version | grep -qi "centos"; then
+elif lsb_release -a 2>/dev/null | grep -qi "centos" || cat /etc/issue 2>/dev/null | grep -qi "centos" || cat /proc/version 2>/dev/null | grep -qi "centos"; then
     release="centos"
-elif [ -f /etc/redhat-release ] || lsb_release -a 2>&1 | grep -Eqi "red hat|redhat" || cat /etc/issue | grep -Eqi "red hat|redhat" || cat /proc/version | grep -Eqi "red hat|redhat" || command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
+elif [ -f /etc/redhat-release ] || lsb_release -a 2>/dev/null | grep -Eqi "red hat|redhat" || cat /etc/issue 2>/dev/null | grep -Eqi "red hat|redhat" || cat /proc/version 2>/dev/null | grep -Eqi "red hat|redhat" || command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
     release="redhat"
 else
     red "不支持的系统！！"
@@ -316,7 +316,7 @@ install_update_v2ray_tls_web()
     fi
     apt -y -f install
     check_important_dependence_installed ca-certificates ca-certificates
-    check_important_dependence_installed lsb-release redhat-lsb-core 
+    check_important_dependence_installed lsb-release redhat-lsb-core
     #系统版本
     systemVersion=`lsb_release -r --short`
     systemctl stop nginx
