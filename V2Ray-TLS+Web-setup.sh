@@ -415,7 +415,6 @@ install_update_v2ray_tls_web()
     mkdir /etc/nginx/conf.d
     mkdir /etc/nginx/certs
     mkdir /etc/nginx/tcmalloc_temp
-    mkdir /etc/nginx/unixsocks_temp
     chmod 777 /etc/nginx/tcmalloc_temp
     cd ..
     config_service_nginx
@@ -1384,7 +1383,9 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
-ExecStartPre=rm -rf /etc/nginx/unixsocks_temp/*.sock
+ExecStartPre=/usr/bin/rm -rf /etc/nginx/unixsocks_temp
+ExecStartPre=/usr/bin/mkdir /etc/nginx/unixsocks_temp
+ExecStartPre=/usr/bin/chmod 755 /etc/nginx/unixsocks_temp
 ExecStart=/etc/nginx/sbin/nginx
 ExecStop=/etc/nginx/sbin/nginx -s stop
 PrivateTmp=true
