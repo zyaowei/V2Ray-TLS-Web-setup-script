@@ -439,7 +439,7 @@ install_update_v2ray_tls_web()
         tyblue " 1. 尝试使用现有nginx"
         tyblue " 2. 卸载现有nginx并重新编译安装"
         echo
-        yellow " 若安装完成后nginx无法启动，请重新安装V2Ray-TLS+Web，并在到达这一步时选择2"
+        yellow " 若安装完成后nginx无法启动，请卸载并重新安装"
         green  " 若想更新nginx，请选择2"
         echo
         choice=""
