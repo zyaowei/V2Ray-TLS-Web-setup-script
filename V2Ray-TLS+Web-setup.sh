@@ -1688,8 +1688,10 @@ start_menu()
         if [ "$choice" == "n" ]; then
             exit 0
         fi
+        enter_temp_dir
         remove_v2ray_nginx
         green  "----------------V2Ray-TLS+Web已删除----------------"
+        rm -rf "$temp_dir"
     elif [ $choice -eq 6 ]; then
         if systemctl is-active v2ray > /dev/null 2>&1 && systemctl is-active nginx > /dev/null 2>&1; then
             local temp_is_active=1
