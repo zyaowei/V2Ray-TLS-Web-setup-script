@@ -2,7 +2,8 @@
 nginx_version="nginx-1.19.2"
 openssl_version="openssl-openssl-3.0.0-alpha6"
 v2ray_config="/usr/local/etc/v2ray/config.json"
-nginx_config="/etc/nginx/conf.d/v2ray.conf"
+nginx_prefix="/etc/nginx"
+nginx_config="${nginx_prefix}/conf.d/v2ray.conf"
 temp_dir="/temp_install_update_v2ray_tls_web"
 
 unset domain_list
@@ -95,11 +96,24 @@ if [ -e /usr/bin/v2ray ] && [ -e /etc/nginx ]; then
 fi
 
 #判断是否已经安装
-if [ -e /usr/local/bin/v2ray ] && [ -e $nginx_config ]; then
-    is_installed=1
-else
-    is_installed=0
-fi
+check_is_installed()
+{
+    if [ -e /usr/local/bin/v2ray ]; then
+        v2ray_is_installed=1
+    else
+        v2ray_is_installed=0
+    fi
+    if [ -e $nginx_config ]; then
+        nginx_is_installed=1
+    else
+        nginx_is_installed=0
+    fi
+    if [ $v2ray_is_installed -eq 1 ] && [ $nginx_is_installed -eq 1 ]; then
+        is_installed=1
+    else
+        is_installed=0
+    fi
+}
 
 #版本比较函数
 version_ge()
@@ -139,8 +153,8 @@ server {
     return 301 https://\$host\$request_uri;
 }
 server {
-    listen unix:/etc/nginx/unixsocks_temp/default.sock default_server;
-    listen unix:/etc/nginx/unixsocks_temp/h2.sock http2 default_server;
+    listen unix:${nginx_prefix}/unixsocks_temp/default.sock default_server;
+    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2 default_server;
     return 301 https://${all_domains[0]};
 }
 EOF
@@ -148,15 +162,15 @@ EOF
     do
 cat >> $nginx_config<<EOF
 server {
-    listen unix:/etc/nginx/unixsocks_temp/default.sock;
-    listen unix:/etc/nginx/unixsocks_temp/h2.sock http2;
+    listen unix:${nginx_prefix}/unixsocks_temp/default.sock;
+    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2;
 EOF
         if [ ${domainconfig_list[i]} -eq 1 ]; then
             echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
         else
             echo "    server_name ${domain_list[i]};" >> $nginx_config
         fi
-        echo "    root /etc/nginx/html/${domain_list[i]};" >> $nginx_config
+        echo "    root ${nginx_prefix}/html/${domain_list[i]};" >> $nginx_config
         if [ ${pretend_list[i]} -eq 2 ]; then
 cat >> $nginx_config<<EOF
     location / {
@@ -183,26 +197,26 @@ cat > $nginx_config<<EOF
 server {
     listen 80 fastopen=100 reuseport default_server;
     listen [::]:80 fastopen=100 reuseport default_server;
-    root /etc/nginx/html/${domain_list[i]};
+    root ${nginx_prefix}/html/${domain_list[i]};
 }
 EOF
         sleep 2s
         systemctl restart nginx
         if [ ${domainconfig_list[i]} -eq 1 ]; then
-            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
-                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
+            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
+                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
             fi
         else
-            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
-                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot /etc/nginx/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
+            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
+                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
             fi
         fi
         if id nobody | grep -q nogroup; then
-            local temp="chown -R nobody:nogroup /etc/nginx/certs"
+            local temp="chown -R nobody:nogroup ${nginx_prefix}/certs"
         else
-            local temp="chown -R nobody:nobody /etc/nginx/certs"
+            local temp="chown -R nobody:nobody ${nginx_prefix}/certs"
         fi
-        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file /etc/nginx/certs/${domain_list[i]}.key --fullchain-file /etc/nginx/certs/${domain_list[i]}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
+        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file ${nginx_prefix}/certs/${domain_list[i]}.key --fullchain-file ${nginx_prefix}/certs/${domain_list[i]}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
             yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
             yellow "按回车键继续。。。"
             read -s
@@ -395,7 +409,7 @@ install_update_v2ray_tls_web()
     fi
     tar -zxf ${openssl_version}.tar.gz
     cd ${nginx_version}
-    ./configure --prefix=/etc/nginx --with-openssl=../$openssl_version --with-openssl-opt="enable-ec_nistp_64_gcc_128 shared threads zlib-dynamic sctp" --with-mail=dynamic --with-mail_ssl_module --with-stream=dynamic --with-stream_ssl_module --with-stream_realip_module --with-stream_geoip_module=dynamic --with-stream_ssl_preread_module --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_geoip_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_auth_request_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-pcre --with-libatomic --with-compat --with-cpp_test_module --with-google_perftools_module --with-file-aio --with-threads --with-poll_module --with-select_module --with-cc-opt="-Wno-error -g0 -O3"
+    ./configure --prefix=${nginx_prefix} --with-openssl=../$openssl_version --with-openssl-opt="enable-ec_nistp_64_gcc_128 shared threads zlib-dynamic sctp" --with-mail=dynamic --with-mail_ssl_module --with-stream=dynamic --with-stream_ssl_module --with-stream_realip_module --with-stream_geoip_module=dynamic --with-stream_ssl_preread_module --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_geoip_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_auth_request_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-pcre --with-libatomic --with-compat --with-cpp_test_module --with-google_perftools_module --with-file-aio --with-threads --with-poll_module --with-select_module --with-cc-opt="-Wno-error -g0 -O3"
     if ! make; then
         red    "nginx编译失败！"
         yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
@@ -412,10 +426,10 @@ install_update_v2ray_tls_web()
         green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
         exit 1
     fi
-    mkdir /etc/nginx/conf.d
-    mkdir /etc/nginx/certs
-    mkdir /etc/nginx/tcmalloc_temp
-    chmod 777 /etc/nginx/tcmalloc_temp
+    mkdir ${nginx_prefix}/conf.d
+    mkdir ${nginx_prefix}/certs
+    mkdir ${nginx_prefix}/tcmalloc_temp
+    chmod 777 ${nginx_prefix}/tcmalloc_temp
     cd ..
     config_service_nginx
 ##安装nignx完成
@@ -453,7 +467,7 @@ install_update_v2ray_tls_web()
     config_v2ray
     config_nginx
     if [ $update == 1 ]; then
-        mv "${temp_dir}/domain_backup/"* /etc/nginx/html 2>/dev/null
+        mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
     else
         get_webs
     fi
@@ -570,7 +584,7 @@ readMode()
 #配置nginx
 config_nginx_init()
 {
-cat > /etc/nginx/conf/nginx.conf <<EOF
+cat > ${nginx_prefix}/conf/nginx.conf <<EOF
 
 user  root root;
 worker_processes  auto;
@@ -580,7 +594,7 @@ worker_processes  auto;
 #error_log  logs/error.log  info;
 
 #pid        logs/nginx.pid;
-google_perftools_profiles /etc/nginx/tcmalloc_temp/tcmalloc;
+google_perftools_profiles ${nginx_prefix}/tcmalloc_temp/tcmalloc;
 
 events {
     worker_connections  1024;
@@ -898,13 +912,12 @@ remove_v2ray_nginx()
     rm -rf /etc/systemd/system/v2ray@.service
     systemctl daemon-reload
     systemctl stop nginx
-    /etc/nginx/sbin/nginx -s stop
+    ${nginx_prefix}/sbin/nginx -s stop
     pkill -9 nginx
     systemctl disable nginx
     rm -rf /etc/systemd/system/nginx.service
     systemctl daemon-reload
-    rm -rf /etc/nginx
-    is_installed=0
+    rm -rf ${nginx_prefix}
 }
 
 #获取内核信息
@@ -1383,11 +1396,11 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
-ExecStartPre=/bin/rm -rf /etc/nginx/unixsocks_temp
-ExecStartPre=/bin/mkdir /etc/nginx/unixsocks_temp
-ExecStartPre=/bin/chmod 755 /etc/nginx/unixsocks_temp
-ExecStart=/etc/nginx/sbin/nginx
-ExecStop=/etc/nginx/sbin/nginx -s stop
+ExecStartPre=/bin/rm -rf ${nginx_prefix}/unixsocks_temp
+ExecStartPre=/bin/mkdir ${nginx_prefix}/unixsocks_temp
+ExecStartPre=/bin/chmod 755 ${nginx_prefix}/unixsocks_temp
+ExecStart=${nginx_prefix}/sbin/nginx
+ExecStop=${nginx_prefix}/sbin/nginx -s stop
 PrivateTmp=true
 
 [Install]
@@ -1428,12 +1441,12 @@ EOF
     fi
 cat >> $v2ray_config <<EOF
                     {
-                        "dest": "/etc/nginx/unixsocks_temp/default.sock",
+                        "dest": "${nginx_prefix}/unixsocks_temp/default.sock",
                         "xver": 0
                     },
                     {
                         "alpn": "h2",
-                        "dest": "/etc/nginx/unixsocks_temp/h2.sock",
+                        "dest": "${nginx_prefix}/unixsocks_temp/h2.sock",
                         "xver": 0
                     }
                 ],
@@ -1453,8 +1466,8 @@ EOF
     do
 cat >> $v2ray_config <<EOF
                         {
-                            "certificateFile": "/etc/nginx/certs/${domain_list[i]}.cer",
-                            "keyFile": "/etc/nginx/certs/${domain_list[i]}.key"
+                            "certificateFile": "${nginx_prefix}/certs/${domain_list[i]}.cer",
+                            "keyFile": "${nginx_prefix}/certs/${domain_list[i]}.key"
 EOF
         if (($i==${#domain_list[@]}-1)); then
             echo "                        }" >> $v2ray_config
@@ -1483,8 +1496,7 @@ cat >> $v2ray_config <<EOF
                         "id": "$v2id_2",
                         "level": 1
                     }
-                ],
-                "disableInsecureEncryption": true
+                ]
             },
             "streamSettings": {
                 "network": "ws",
@@ -1522,16 +1534,16 @@ get_webs()
 {
     for ((i=0;i<${#domain_list[@]};i++))
     do
-        rm -rf /etc/nginx/html/${domain_list[i]}
+        rm -rf ${nginx_prefix}/html/${domain_list[i]}
         if [ ${pretend_list[i]} -eq 3 ]; then
-            mkdir /etc/nginx/html/${domain_list[i]}
-            if ! wget -O /etc/nginx/html/${domain_list[i]}/Website-Template.zip https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/Website-Template.zip; then
+            mkdir ${nginx_prefix}/html/${domain_list[i]}
+            if ! wget -O ${nginx_prefix}/html/${domain_list[i]}/Website-Template.zip https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/Website-Template.zip; then
                 red    "获取网站模板失败"
                 yellow "按回车键继续或者按ctrl+c终止"
                 read -s
             fi
-            unzip -q -d /etc/nginx/html/${domain_list[i]} /etc/nginx/html/${domain_list[i]}/Website-Template.zip
-            rm -rf /etc/nginx/html/${domain_list[i]}/Website-Template.zip
+            unzip -q -d ${nginx_prefix}/html/${domain_list[i]} ${nginx_prefix}/html/${domain_list[i]}/Website-Template.zip
+            rm -rf ${nginx_prefix}/html/${domain_list[i]}/Website-Template.zip
         fi
     done
 }
@@ -1539,36 +1551,32 @@ get_webs()
 #开始菜单
 start_menu()
 {
-    if [ -e /usr/local/bin/v2ray ]; then
+    check_is_installed
+    if [ $v2ray_is_installed -eq 1 ]; then
         local v2ray_status="\033[32m已安装"
     else
         local v2ray_status="\033[31m未安装"
     fi
     if systemctl is-active v2ray > /dev/null 2>&1; then
         v2ray_status="${v2ray_status}                \033[32m运行中"
-        v2ray_status[1]=1
     else
         v2ray_status="${v2ray_status}                \033[31m未运行"
-        v2ray_status[1]=0
     fi
-    if [ $is_installed == 1 ]; then
+    if [ $nginx_is_installed -eq 1 ]; then
         local nginx_status="\033[32m已安装"
     else
         local nginx_status="\033[31m未安装"
     fi
     if systemctl is-active nginx > /dev/null 2>&1; then
         nginx_status="${nginx_status}                \033[32m运行中"
-        nginx_status[1]=1
     else
         nginx_status="${nginx_status}                \033[31m未运行"
-        nginx_status[1]=0
     fi
     tyblue "-------------------- V2Ray TLS(1.3)+Web 搭建/管理脚本----------------------"
     echo
     tyblue "            V2Ray：            ${v2ray_status}"
     echo
     tyblue "            Nginx：            ${nginx_status}"
-    echo
     echo
     tyblue " 官网：https://github.com/kirin10000/V2Ray-TLS-Web-setup-script"
     echo
@@ -1582,18 +1590,18 @@ start_menu()
     echo
     echo
     tyblue " -----------安装/升级/卸载-----------"
-    if [ $is_installed == 0 ]; then
+    if [ $is_installed -eq 0 ]; then
         green  "   1. 安装V2Ray-TLS+Web"
     else
         green  "   1. 重新安装V2Ray-TLS+Web"
     fi
     green  "   2. 升级V2Ray-TLS+Web"
-    tyblue "   3. 仅安装bbr(包含升级内核/安装bbr/bbr2/bbrplus/魔改版bbr/锐速)"
+    tyblue "   3. 仅安装bbr(包含bbr2/bbrplus/bbr魔改版/暴力bbr魔改版/锐速)"
     tyblue "   4. 仅升级V2Ray"
     red    "   5. 卸载V2Ray-TLS+Web"
     echo
     tyblue " --------------启动/停止-------------"
-    if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
+    if systemctl is-active v2ray > /dev/null 2>&1 && systemctl is-active nginx > /dev/null 2>&1; then
         tyblue "   6. 重新启动V2Ray-TLS+Web"
     else
         tyblue "   6. 启动V2Ray-TLS+Web"
@@ -1663,7 +1671,7 @@ start_menu()
             yellow "获取V2Ray安装脚本失败"
         fi
         if ! bash install-release.sh; then
-                yellow "V2Ray更新失败"
+            yellow "V2Ray更新失败"
         fi
         green "----------------升级完成----------------"
         rm -rf "$temp_dir"
@@ -1680,16 +1688,23 @@ start_menu()
         remove_v2ray_nginx
         green  "----------------V2Ray-TLS+Web已删除----------------"
     elif [ $choice -eq 6 ]; then
+        if systemctl is-active v2ray > /dev/null 2>&1 && systemctl is-active nginx > /dev/null 2>&1; then
+            local temp_is_active=1
+        else
+            local temp_is_active=0
+        fi
         systemctl restart nginx
         systemctl restart v2ray
         sleep 1s
-        if ! systemctl is-active v2ray > /dev/null 2>&1 || ! systemctl is-active nginx > /dev/null 2>&1; then
-            red "启动失败！！"
+        if ! systemctl is-active v2ray > /dev/null 2>&1; then
+            red "V2Ray启动失败！！"
+        elif ! systemctl is-active nginx > /dev/null 2>&1; then
+            red "nginx启动失败！！"
         else
-            if [ ${v2ray_status[1]} -eq 1 ] && [ ${nginx_status[1]} -eq 1 ]; then
-                green "--------------------------重启完成--------------------------"
+            if [ $temp_is_active -eq 1 ]; then
+                green "重启成功！！"
             else
-                green "----------------V2Ray-TLS+Web已启动---------------"
+                green "启动成功！！"
             fi
         fi
     elif [ $choice -eq 7 ]; then
@@ -1728,7 +1743,7 @@ start_menu()
         readDomain
         get_all_certs
         get_webs
-        mv "${temp_dir}/domain_backup/"* /etc/nginx/html 2>/dev/null
+        mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
         config_nginx
         config_v2ray
         sleep 2s
@@ -1766,7 +1781,7 @@ start_menu()
         if [ $delete -eq ${#domain_list[@]} ]; then
             exit 0
         fi
-        rm -rf /etc/nginx/html/${domain_list[$delete]}
+        rm -rf ${nginx_prefix}/html/${domain_list[$delete]}
         unset domain_list[$delete]
         unset domainconfig_list[$delete]
         unset pretend_list[$delete]
@@ -1932,9 +1947,9 @@ backup_domains_web()
     for i in ${!domain_list[@]}
     do
         if [ "$1" == "cp" ]; then
-            cp -rf /etc/nginx/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
+            cp -rf ${nginx_prefix}/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
         else
-            mv /etc/nginx/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
+            mv ${nginx_prefix}/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
         fi
     done
 }
