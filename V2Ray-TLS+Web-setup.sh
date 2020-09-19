@@ -91,7 +91,7 @@ fi
 ######
 if [ -e /usr/bin/v2ray ] && [ -e /etc/nginx ]; then
     yellow "当前安装的V2Ray版本过旧，脚本已不再支持！"
-    yellow "请选择1选项安装重新安装"
+    yellow "请选择1选项重新安装"
     sleep 3s
 fi
 
@@ -280,6 +280,42 @@ get_domainlist()
     done
 }
 
+#安装nignx
+install_nginx()
+{
+    if ! wget -O ${nginx_version}.tar.gz https://nginx.org/download/${nginx_version}.tar.gz ; then
+        red    "获取nginx失败"
+        yellow "按回车键继续或者按ctrl+c终止"
+        read -s
+    fi
+    tar -zxf ${nginx_version}.tar.gz
+    if ! wget -O ${openssl_version}.tar.gz https://github.com/openssl/openssl/archive/${openssl_version#*-}.tar.gz ; then
+        red    "获取openssl失败"
+        yellow "按回车键继续或者按ctrl+c终止"
+        read -s
+    fi
+    tar -zxf ${openssl_version}.tar.gz
+    cd ${nginx_version}
+    ./configure --prefix=${nginx_prefix} --with-openssl=../$openssl_version --with-openssl-opt="enable-ec_nistp_64_gcc_128 shared threads zlib-dynamic sctp" --with-mail=dynamic --with-mail_ssl_module --with-stream=dynamic --with-stream_ssl_module --with-stream_realip_module --with-stream_geoip_module=dynamic --with-stream_ssl_preread_module --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_geoip_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_auth_request_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-pcre --with-libatomic --with-compat --with-cpp_test_module --with-google_perftools_module --with-file-aio --with-threads --with-poll_module --with-select_module --with-cc-opt="-Wno-error -g0 -O3"
+    if ! make; then
+        red    "nginx编译失败！"
+        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
+        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
+        exit 1
+    fi
+    if [ $update == 1 ]; then
+        backup_domains_web
+    fi
+    remove_v2ray_nginx
+    if ! make install; then
+        red    "nginx安装失败！"
+        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
+        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
+        exit 1
+    fi
+    cd ..
+}
+
 #安装
 install_update_v2ray_tls_web()
 {
@@ -396,41 +432,27 @@ install_update_v2ray_tls_web()
     yum clean all
 
 ##安装nginx
-    if ! wget -O ${nginx_version}.tar.gz https://nginx.org/download/${nginx_version}.tar.gz ; then
-        red    "获取nginx失败"
-        yellow "按回车键继续或者按ctrl+c终止"
-        read -s
-    fi
-    tar -zxf ${nginx_version}.tar.gz
-    if ! wget -O ${openssl_version}.tar.gz https://github.com/openssl/openssl/archive/${openssl_version#*-}.tar.gz ; then
-        red    "获取openssl失败"
-        yellow "按回车键继续或者按ctrl+c终止"
-        read -s
-    fi
-    tar -zxf ${openssl_version}.tar.gz
-    cd ${nginx_version}
-    ./configure --prefix=${nginx_prefix} --with-openssl=../$openssl_version --with-openssl-opt="enable-ec_nistp_64_gcc_128 shared threads zlib-dynamic sctp" --with-mail=dynamic --with-mail_ssl_module --with-stream=dynamic --with-stream_ssl_module --with-stream_realip_module --with-stream_geoip_module=dynamic --with-stream_ssl_preread_module --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_geoip_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_auth_request_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-pcre --with-libatomic --with-compat --with-cpp_test_module --with-google_perftools_module --with-file-aio --with-threads --with-poll_module --with-select_module --with-cc-opt="-Wno-error -g0 -O3"
-    if ! make; then
-        red    "nginx编译失败！"
-        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
-        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
-        exit 1
-    fi
-    if [ $update == 1 ]; then
-        backup_domains_web
-    fi
-    remove_v2ray_nginx
-    if ! make install; then
-        red    "nginx安装失败！"
-        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
-        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
-        exit 1
+    if [ $nginx_is_installed -eq 0 ] || [ $update -eq 1 ]; then
+        install_nginx
+    else
+        tyblue "---------------检测到nginx已存在---------------"
+        tyblue " 1. 尝试使用现有nginx"
+        tyblue " 2. 卸载现有nginx并重新编译安装"
+        echo
+        yellow " 若安装完成后nginx无法启动，请重新安装V2Ray-TLS+Web，并在到达这一步时选择2"
+        green  " 若想更新nginx，请选择2"
+        echo
+        choice=""
+        while [ "$choice" != "1" ] && [ "$choice" != "2" ]
+        do
+            read -p "您的选择是：" choice
+        done
+        if [ $choice -eq 2 ]; then
+            install_nginx
+        fi
     fi
     mkdir ${nginx_prefix}/conf.d
     mkdir ${nginx_prefix}/certs
-    mkdir ${nginx_prefix}/tcmalloc_temp
-    chmod 777 ${nginx_prefix}/tcmalloc_temp
-    cd ..
     config_service_nginx
 ##安装nignx完成
 
@@ -502,22 +524,11 @@ readDomain()
     local domainconfig=""
     local pretend=""
     echo -e "\n\n\n"
-    tyblue "----------------------关于域名的说明----------------------"
-    tyblue " 假设你的域名是abcd.com，则:"
-    tyblue " 一级域名为:abcd.com(主机记录为 @ )"
-    tyblue " 二级域名为:xxx.abcd.com(如www.abcd.com，pan.abcd.com，前缀为主机记录)"
-    tyblue " 三级域名为:xxx.xxx.abcd.com"
-    tyblue " 可以在cmd里用ping+域名来查看域名的解析情况"
-    tyblue "----------------------------------------------------------"
-    echo
-    tyblue "----------------------------------------------------------"
-    tyblue " 若你有多个域名，但想只用某个解析到此服务器的域名，请选择2并输入该域名"
-    tyblue " 注:在这里拥有相同一级域名的二(三)级域名也算不同域名"
-    tyblue " 如:www.abcd.com，pan.abcd.com，abcd.com，abcd2.com算不同域名"
-    echo
     tyblue "--------------------请选择域名解析情况--------------------"
-    tyblue " 1. 一级域名和  www.一级域名  都解析到此服务器上"
-    tyblue " 2. 仅一级域名或某个二(三)级域名解析到此服务器上"
+    tyblue " 1. 一级域名 和 www.一级域名 都解析到此服务器上"
+    green  "    如：123.com 和 www.123.com 都解析到此服务器上"
+    tyblue " 2. 仅某个域名解析到此服务器上"
+    green  "    如：123.com 或 www.123.com 或 xxx.123.com 中的某一个解析到此服务器上"
     echo
     while [ "$domainconfig" != "1" -a "$domainconfig" != "2" ]
     do
@@ -1399,8 +1410,13 @@ User=root
 ExecStartPre=/bin/rm -rf ${nginx_prefix}/unixsocks_temp
 ExecStartPre=/bin/mkdir ${nginx_prefix}/unixsocks_temp
 ExecStartPre=/bin/chmod 755 ${nginx_prefix}/unixsocks_temp
+ExecStartPre=/bin/rm -rf ${nginx_prefix}/tcmalloc_temp
+ExecStartPre=/bin/mkdir ${nginx_prefix}/tcmalloc_temp
+ExecStartPre=/bin/chmod 777 ${nginx_prefix}/tcmalloc_temp
 ExecStart=${nginx_prefix}/sbin/nginx
 ExecStop=${nginx_prefix}/sbin/nginx -s stop
+ExecStopPost=/bin/rm -rf ${nginx_prefix}/tcmalloc_temp
+ExecStopPost=/bin/rm -rf ${nginx_prefix}/unixsocks_temp
 PrivateTmp=true
 
 [Install]
@@ -1551,7 +1567,6 @@ get_webs()
 #开始菜单
 start_menu()
 {
-    check_is_installed
     if [ $v2ray_is_installed -eq 1 ]; then
         local v2ray_status="\033[32m已安装"
     else
@@ -1630,18 +1645,6 @@ start_menu()
         read -p "您的选择是：" choice
     done
     if [ $choice -eq 1 ]; then
-        if [ $is_installed == 1 ]; then
-            yellow "将卸载现有V2Ray-TLS+Web，并重新安装"
-            choice=""
-            while [ "$choice" != "y" ] && [ "$choice" != "n" ]
-            do
-                tyblue "是否继续？(y/n)"
-                read choice
-            done
-            if [ $choice == n ]; then
-                exit 0
-            fi
-        fi
         install_update_v2ray_tls_web
     elif [ $choice -eq 2 ]; then
         if [ $is_installed == 1 ]; then
@@ -1954,6 +1957,7 @@ backup_domains_web()
     done
 }
 
+check_is_installed
 if ! [ "$1" == "--update" ]; then
     update=0
     start_menu
