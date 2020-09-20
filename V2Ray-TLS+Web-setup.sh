@@ -917,10 +917,11 @@ uninstall_firewall()
     pkill -9 /usr/local/qcloud
     pkill -9 barad_agent
     rm -rf /usr/local/qcloud
+    rm -rf /usr/local/yd.socket.client
     mkdir /usr/local/qcloud
     mkdir /usr/local/qcloud/action
-    mkdir /usr/local/qcloud/login_banner.sh
-    mkdir /usr/local/qcloud/action.sh
+    mkdir /usr/local/qcloud/action/login_banner.sh
+    mkdir /usr/local/qcloud/action/action.sh
 }
 
 #卸载v2ray和nginx
