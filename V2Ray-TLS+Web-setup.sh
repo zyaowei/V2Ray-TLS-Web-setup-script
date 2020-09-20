@@ -900,6 +900,17 @@ uninstall_firewall()
     rm -rf /etc/rc4.d/S80aegis
     rm -rf /etc/rc5.d/S80aegis
 #腾讯云盾
+    /usr/local/qcloud/stargate/admin/uninstall.sh
+    /usr/local/qcloud/YunJing/uninst.sh
+    /usr/local/qcloud/monitor/barad/admin/uninstall.sh
+    systemctl daemon-reload
+    systemctl stop YDService
+    systemctl disable YDService
+    rm -rf /lib/systemd/system/YDService.service
+    systemctl daemon-reload
+    sed -i 's#/usr/local/qcloud#rcvtevyy4f5d#g' /etc/rc.local
+    sed -i '/rcvtevyy4f5d/d' /etc/rc.local
+    rm -rf $(find /etc/udev/rules.d -iname *qcloud* 2>/dev/null)
     pkill -9 YDService
     pkill -9 YDLive
     pkill -9 sgagent
