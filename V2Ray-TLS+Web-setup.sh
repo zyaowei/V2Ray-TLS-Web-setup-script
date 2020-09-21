@@ -465,8 +465,8 @@ install_update_v2ray_tls_web()
 ##安装nignx完成
 
 #安装v2ray
-    if ! curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
-        if ! curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
+    if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
+        if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
             yellow "获取V2Ray安装脚本失败"
             yellow "按回车键继续或者按ctrl+c终止"
             read -s
@@ -941,7 +941,7 @@ remove_v2ray_nginx()
 remove_v2ray()
 {
     systemctl stop v2ray
-    curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh
+    curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh
     bash install-release.sh --remove
     systemctl disable v2ray
     rm -rf /usr/bin/v2ray
@@ -1410,7 +1410,7 @@ echo_end()
     tyblue " 修改$nginx_config"
     tyblue " 将v.qq.com修改为你要镜像的网站"
     echo
-    tyblue " 脚本最后更新时间：2020.09.12"
+    tyblue " 脚本最后更新时间：2020.09.21"
     echo
     red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
     tyblue " 2020.08"
@@ -1708,7 +1708,7 @@ start_menu()
         rm -rf "$temp_dir"
     elif [ $choice -eq 4 ]; then
         enter_temp_dir
-        if ! curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
+        if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
             yellow "获取V2Ray安装脚本失败"
         fi
         if ! bash install-release.sh; then
