@@ -170,62 +170,66 @@ EOF
         else
             echo "    server_name ${domain_list[i]};" >> $nginx_config
         fi
-        echo "    root ${nginx_prefix}/html/${domain_list[i]};" >> $nginx_config
-        if [ ${pretend_list[i]} -eq 2 ]; then
+        if [ ${pretend_list[i]} -eq 1 ]; then
+            echo "    return 403;" >> $nginx_config
+        elif [ ${pretend_list[i]} -eq 2 ]; then
 cat >> $nginx_config<<EOF
     location / {
         proxy_pass https://v.qq.com;
         proxy_set_header referer "https://v.qq.com";
     }
 EOF
+        elif [ ${pretend_list[i]} -eq 3 ]; then
+            echo "    root ${nginx_prefix}/html/${domain_list[i]};" >> $nginx_config
         fi
         echo "}" >> $nginx_config
     done
 }
 
-#获取证书
-get_all_certs()
+#获取证书 参数: domain domainconfig
+get_cert()
 {
-    local i
     config_nginx_init
     mv $nginx_config $nginx_config.bak 2>/dev/null
     mv $v2ray_config $v2ray_config.bak
     echo "{}" >> $v2ray_config
-    for ((i=0;i<${#domain_list[@]};i++))
-    do
 cat > $nginx_config<<EOF
 server {
     listen 80 fastopen=100 reuseport default_server;
     listen [::]:80 fastopen=100 reuseport default_server;
-    root ${nginx_prefix}/html/${domain_list[i]};
+    root ${nginx_prefix}/html/$1;
 }
 EOF
-        sleep 2s
-        systemctl restart nginx
-        if [ ${domainconfig_list[i]} -eq 1 ]; then
-            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
-                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} -d www.${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
-            fi
-        else
-            if ! $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp; then
-                $HOME/.acme.sh/acme.sh --issue -d ${domain_list[i]} --webroot ${nginx_prefix}/html/${domain_list[i]} -k ec-256 -ak ec-256 --ocsp --debug
-            fi
-        fi
-        if id nobody | grep -q nogroup; then
-            local temp="chown -R nobody:nogroup ${nginx_prefix}/certs"
-        else
-            local temp="chown -R nobody:nobody ${nginx_prefix}/certs"
-        fi
-        if ! $HOME/.acme.sh/acme.sh --installcert -d ${domain_list[i]} --key-file ${nginx_prefix}/certs/${domain_list[i]}.key --fullchain-file ${nginx_prefix}/certs/${domain_list[i]}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
-            yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
-            yellow "按回车键继续。。。"
-            read -s
-        fi
-    done
-    systemctl stop nginx
-    systemctl stop v2ray
+    sleep 2s
+    systemctl restart nginx
+    if [ $2 -eq 1 ]; then
+        local temp="-d www.$1"
+    else
+        local temp=""
+    fi
+    if ! $HOME/.acme.sh/acme.sh --issue -d $1 $temp --webroot ${nginx_prefix}/html/$1 -k ec-256 -ak ec-256 --ocsp; then
+        $HOME/.acme.sh/acme.sh --issue -d $1 $temp --webroot ${nginx_prefix}/html/$1 -k ec-256 -ak ec-256 --ocsp --debug
+    fi
+    if id nobody | grep -q nogroup; then
+        temp="chown -R nobody:nogroup ${nginx_prefix}/certs"
+    else
+        temp="chown -R nobody:nobody ${nginx_prefix}/certs"
+    fi
+    if ! $HOME/.acme.sh/acme.sh --installcert -d $1 --key-file ${nginx_prefix}/certs/${1}.key --fullchain-file ${nginx_prefix}/certs/${1}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
+        yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
+        yellow "按回车键继续。。。"
+        read -s
+    fi
     mv $nginx_config.bak $nginx_config 2>/dev/null
     mv $v2ray_config.bak $v2ray_config
+}
+get_all_certs()
+{
+    local i
+    for ((i=0;i<${#domain_list[@]};i++))
+    do
+        get_cert ${domain_list[i]} ${domainconfig_list[i]}
+    done
 }
 
 #获取配置信息 path port v2id_1 v2id_2 mode
@@ -272,10 +276,12 @@ get_domainlist()
         else
             domainconfig_list[i]=1
         fi
-        if awk 'NR=='"$(($line+2))"' {print $0}' $nginx_config | grep -q "location / {"; then
+        if awk 'NR=='"$(($line+1))"' {print $0}' $nginx_config | grep -q "return 403"; then
+            pretend_list[i]=1
+        elif awk 'NR=='"$(($line+1))"' {print $0}' $nginx_config | grep -q "location / {"; then
             pretend_list[i]=2
         else
-            pretend_list[i]=1
+            pretend_list[i]=3
         fi
     done
 }
@@ -449,6 +455,8 @@ install_update_v2ray_tls_web()
         done
         if [ $choice -eq 2 ]; then
             install_nginx
+        else
+            remove_v2ray
         fi
     fi
     mkdir ${nginx_prefix}/conf.d
@@ -491,11 +499,11 @@ install_update_v2ray_tls_web()
     if [ $update == 1 ]; then
         mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
     else
-        get_webs
+        get_all_webs
     fi
     sleep 2s
-    systemctl start nginx
-    systemctl start v2ray
+    systemctl restart nginx
+    systemctl restart v2ray
     if [ $update == 1 ]; then
         green "-------------------升级完成-------------------"
     else
@@ -552,9 +560,9 @@ readDomain()
     esac
     echo -e "\n\n\n"
     tyblue "------------------------------请选择要伪装的网站页面------------------------------"
-    tyblue " 1. 404页面 (模拟网站后台)"
+    tyblue " 1. 403页面 (模拟网站后台)"
     green  "    说明：大型网站几乎都有使用网站后台，比如bilibili的每个视频都是由"
-    green  "    另外一个域名提供的，直接访问那个域名的根目录将返回404或其他错误页面"
+    green  "    另外一个域名提供的，直接访问那个域名的根目录将返回403或其他错误页面"
     tyblue " 2. 镜像腾讯视频网站"
     green  "    说明：是真镜像站，非链接跳转，默认为腾讯视频，搭建完成后可以自己修改，可能构成侵权"
     tyblue " 3. nextcloud登陆页面"
@@ -927,6 +935,11 @@ uninstall_firewall()
 #卸载v2ray和nginx
 remove_v2ray_nginx()
 {
+    remove_v2ray
+    remove_nginx
+}
+remove_v2ray()
+{
     systemctl stop v2ray
     curl -O https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh
     bash install-release.sh --remove
@@ -938,6 +951,9 @@ remove_v2ray_nginx()
     rm -rf /etc/systemd/system/v2ray.service
     rm -rf /etc/systemd/system/v2ray@.service
     systemctl daemon-reload
+}
+remove_nginx()
+{
     systemctl stop nginx
     ${nginx_prefix}/sbin/nginx -s stop
     pkill -9 nginx
@@ -1414,6 +1430,7 @@ get_random_port()
 config_service_nginx()
 {
     systemctl disable nginx
+    rm -rf /etc/systemd/system/nginx.service
 cat > /etc/systemd/system/nginx.service << EOF
 [Unit]
 Description=The NGINX HTTP and reverse proxy server
@@ -1561,22 +1578,27 @@ cat >> $v2ray_config <<EOF
 EOF
 }
 
-#下载nextcloud模板，用于伪装
-get_webs()
+#下载nextcloud模板，用于伪装    参数: domain pretend
+get_web()
 {
+    if [ $2 -eq 3 ]; then
+        rm -rf ${nginx_prefix}/html/$1
+        mkdir ${nginx_prefix}/html/$1
+        if ! wget -O ${nginx_prefix}/html/$1/Website-Template.zip https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/Website-Template.zip; then
+            red    "获取网站模板失败"
+            yellow "按回车键继续或者按ctrl+c终止"
+            read -s
+        fi
+        unzip -q -d ${nginx_prefix}/html/$1 ${nginx_prefix}/html/$1/Website-Template.zip
+        rm -rf ${nginx_prefix}/html/$1/Website-Template.zip
+    fi
+}
+get_all_webs()
+{
+    local i
     for ((i=0;i<${#domain_list[@]};i++))
     do
-        rm -rf ${nginx_prefix}/html/${domain_list[i]}
-        if [ ${pretend_list[i]} -eq 3 ]; then
-            mkdir ${nginx_prefix}/html/${domain_list[i]}
-            if ! wget -O ${nginx_prefix}/html/${domain_list[i]}/Website-Template.zip https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/Website-Template.zip; then
-                red    "获取网站模板失败"
-                yellow "按回车键继续或者按ctrl+c终止"
-                read -s
-            fi
-            unzip -q -d ${nginx_prefix}/html/${domain_list[i]} ${nginx_prefix}/html/${domain_list[i]}/Website-Template.zip
-            rm -rf ${nginx_prefix}/html/${domain_list[i]}/Website-Template.zip
-        fi
+        get_web ${domain_list[i]} ${pretend_list[i]}
     done
 }
 
@@ -1744,12 +1766,12 @@ start_menu()
         readDomain
         get_base_information
         get_all_certs
-        get_webs
+        get_all_webs
         config_nginx
         config_v2ray
         sleep 2s
-        systemctl start nginx
-        systemctl start v2ray
+        systemctl restart nginx
+        systemctl restart v2ray
         green "-------域名重置完成-------"
         echo_end
     elif [ $choice -eq 10 ]; then
@@ -1759,20 +1781,16 @@ start_menu()
         fi
         get_base_information
         get_domainlist
-        enter_temp_dir
-        backup_domains_web cp
         readDomain
-        get_all_certs
-        get_webs
-        mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
+        get_cert ${domain_list[-1]} ${domainconfig_list[-1]}
+        get_web ${domain_list[-1]} ${pretend_list[-1]}
         config_nginx
         config_v2ray
         sleep 2s
-        systemctl start nginx
-        systemctl start v2ray
+        systemctl restart nginx
+        systemctl restart v2ray
         green "-------域名添加完成-------"
         echo_end
-        rm -rf "$temp_dir"
     elif [ $choice -eq 11 ]; then
         if [ $is_installed == 0 ] ; then
             red "请先安装V2Ray-TLS+Web！！"
