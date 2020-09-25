@@ -322,7 +322,29 @@ install_nginx()
     cd ..
 }
 
-#安装
+#安装/更新V2Ray
+install_update_v2ray()
+{
+    if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
+        if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
+            yellow "获取V2Ray脚本失败"
+            yellow "按回车键继续或者按ctrl+c终止"
+            read -s
+            return 1
+        fi
+    fi
+    if ! bash install-release.sh; then
+        if ! bash install-release.sh; then
+            yellow "V2Ray安装/升级失败"
+            yellow "按回车键继续或者按ctrl+c终止"
+            read -s
+            return 1
+        fi
+    fi
+    return 0
+}
+
+#安装v2ray_tls_web
 install_update_v2ray_tls_web()
 {
     check_important_dependence_installed()
@@ -391,7 +413,8 @@ install_update_v2ray_tls_web()
     enter_temp_dir
     install_bbr
     apt -y -f install
-    #读取域名
+
+#读取信息
     if [ $update == 0 ]; then
         readDomain
         readMode
@@ -399,7 +422,8 @@ install_update_v2ray_tls_web()
         get_base_information
         get_domainlist
     fi
-    ##安装依赖
+
+    green "正在安装依赖。。。。"
     if [ $release == centos ] || [ $release == redhat ]; then
         install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
         ##libxml2-devel非必须
@@ -439,6 +463,7 @@ install_update_v2ray_tls_web()
 
 ##安装nginx
     if [ $nginx_is_installed -eq 0 ] || [ $update -eq 1 ]; then
+        green "正在编译和安装nginx。。。。"
         install_nginx
     else
         tyblue "---------------检测到nginx已存在---------------"
@@ -454,6 +479,7 @@ install_update_v2ray_tls_web()
             read -p "您的选择是：" choice
         done
         if [ $choice -eq 2 ]; then
+            green "正在编译和安装nginx。。。。"
             install_nginx
         else
             remove_v2ray
@@ -462,27 +488,12 @@ install_update_v2ray_tls_web()
     mkdir ${nginx_prefix}/conf.d
     mkdir ${nginx_prefix}/certs
     config_service_nginx
-##安装nignx完成
 
-#安装v2ray
-    if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
-        if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
-            yellow "获取V2Ray安装脚本失败"
-            yellow "按回车键继续或者按ctrl+c终止"
-            read -s
-        fi
-    fi
-    if ! bash install-release.sh; then
-        if ! bash install-release.sh; then
-            yellow "V2Ray安装失败"
-            yellow "按回车键继续或者按ctrl+c终止"
-            read -s
-        fi
-    fi
+    green "正在安装V2Ray。。。。"
+    install_update_v2ray
     systemctl enable v2ray
-    systemctl stop v2ray
 
-#安装acme.sh获取证书
+    green "正在获取证书。。。。"
     curl https://get.acme.sh | sh
     $HOME/.acme.sh/acme.sh --upgrade --auto-upgrade
     get_all_certs
@@ -1477,6 +1488,7 @@ cat > $v2ray_config <<EOF
                         "level": 2
                     }
                 ],
+                "decryption": "none",
                 "fallbacks": [
 EOF
     if [ $mode -eq 1 ]; then
@@ -1498,8 +1510,7 @@ cat >> $v2ray_config <<EOF
                         "dest": "${nginx_prefix}/unixsocks_temp/h2.sock",
                         "xver": 0
                     }
-                ],
-                "decryption": "none"
+                ]
             },
             "streamSettings": {
                 "network": "tcp",
@@ -1708,13 +1719,11 @@ start_menu()
         rm -rf "$temp_dir"
     elif [ $choice -eq 4 ]; then
         enter_temp_dir
-        if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
-            yellow "获取V2Ray安装脚本失败"
+        if install_update_v2ray; then
+            green "----------------升级完成----------------"
+        else
+            red "升级失败！"
         fi
-        if ! bash install-release.sh; then
-            yellow "V2Ray更新失败"
-        fi
-        green "----------------升级完成----------------"
         rm -rf "$temp_dir"
     elif [ $choice -eq 5 ]; then
         choice=""
