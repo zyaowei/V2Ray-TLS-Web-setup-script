@@ -40,6 +40,37 @@ if [ "$EUID" != "0" ]; then
 fi
 
 #确保系统支持
+check_important_dependence_installed()
+{
+    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+        if ! dpkg -s $1 2>&1 >/dev/null; then
+            if ! apt -y --no-install-recommends install $1; then
+                apt update
+                if ! apt -y --no-install-recommends install $1; then
+                    yellow "重要组件安装失败！！"
+                    red "不支持的系统！！"
+                    exit 1
+                fi
+            fi
+        fi
+    else
+        if ! rpm -q $2 2>&1 >/dev/null; then
+            if ! yum -y install $2; then
+                yellow "重要组件安装失败！！"
+                red "不支持的系统！！"
+                exit 1
+            fi
+        fi
+    fi
+}
+if [[ -f /.dockerenv ]] || grep -q 'docker\|lxc' /proc/1/cgroup && [[ "$(type -P systemctl)" ]]; then
+    true
+elif [[ -d /run/systemd/system ]] || grep -q systemd <(ls -l /sbin/init); then
+    true
+else
+    red "仅支持使用systemd的系统！"
+    exit 1
+fi
 if command -v apt > /dev/null 2>&1 && command -v yum > /dev/null 2>&1; then
     red "apt与yum同时存在，请卸载掉其中一个"
     choice=""
@@ -50,32 +81,42 @@ if command -v apt > /dev/null 2>&1 && command -v yum > /dev/null 2>&1; then
     done
     if [ $choice == y ]; then
         apt -y purge yum
-        apt -y remove yum
         yum -y remove apt
         if command -v apt > /dev/null 2>&1 && command -v yum > /dev/null 2>&1; then
-            yellow "卸载失败，不支持的系统"
+            yellow "卸载失败！！"
+            red "不支持的系统！！"
             exit 1
         fi
     else
         exit 0
     fi
-elif ! command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
+fi
+if ! command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
     red "不支持的系统或apt/yum缺失"
     exit 1
+elif command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
+    release="other-debian"
+elif command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
+    release="other-redhat"
 fi
-
-if lsb_release -a 2>/dev/null | grep -qi "ubuntu" || cat /etc/lsb-release 2>/dev/null | grep -qi "ubuntu" || cat /etc/os-release 2>/dev/null | grep -qi "ubuntu" || cat /etc/issue 2>/dev/null | grep -qi "ubuntu"; then
+check_important_dependence_installed lsb-release redhat-lsb-core
+if lsb_release -a 2>/dev/null | grep -qi "ubuntu"; then
     release="ubuntu"
-elif lsb_release -a 2>/dev/null | grep -qi "debian" || cat /etc/issue 2>/dev/null | grep -qi "debian" || cat /proc/version 2>/dev/null | grep -qi "debian" || command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
+elif lsb_release -a 2>/dev/null | grep -qi "debian"; then
     release="debian"
-elif lsb_release -a 2>/dev/null | grep -qi "centos" || cat /etc/issue 2>/dev/null | grep -qi "centos" || cat /proc/version 2>/dev/null | grep -qi "centos"; then
+elif command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
+    release="other-debian"
+elif lsb_release -a 2>/dev/null | grep -qi "centos"; then
     release="centos"
-elif [ -f /etc/redhat-release ] || lsb_release -a 2>/dev/null | grep -Eqi "red hat|redhat" || cat /etc/issue 2>/dev/null | grep -Eqi "red hat|redhat" || cat /proc/version 2>/dev/null | grep -Eqi "red hat|redhat" || command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
-    release="redhat"
+elif command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
+    release="other-redhat"
 else
     red "不支持的系统！！"
     exit 1
 fi
+check_important_dependence_installed ca-certificates ca-certificates
+
+systemVersion=`lsb_release -r --short`
 
 #判断内存是否太小
 if [ "$(cat /proc/meminfo |grep 'MemTotal' |awk '{print $3}' | tr [A-Z] [a-z])" == "kb" ]; then
@@ -349,32 +390,9 @@ install_update_v2ray()
 #安装v2ray_tls_web
 install_update_v2ray_tls_web()
 {
-    check_important_dependence_installed()
-    {
-        if [ $release == ubuntu ] || [ $release == debian ]; then
-            if ! dpkg -s $1 2>&1 >/dev/null; then
-                if ! apt -y --no-install-recommends install $1; then
-                    apt update
-                    if ! apt -y --no-install-recommends install $1; then
-                        yellow "重要组件安装失败！！"
-                        yellow "按回车键继续或者ctrl+c退出"
-                        read -s
-                    fi
-                fi
-            fi
-        else
-            if ! rpm -q $2 2>&1 >/dev/null; then
-                if ! yum -y install $2; then
-                    yellow "重要组件安装失败！！"
-                    yellow "按回车键继续或者ctrl+c退出"
-                    read -s
-                fi
-            fi
-        fi
-    }
     install_dependence()
     {
-        if [ $release == ubuntu ] || [ $release == debian ]; then
+        if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
             if ! apt -y --no-install-recommends install $1; then
                 apt update
                 if ! apt -y --no-install-recommends install $1; then
@@ -395,10 +413,6 @@ install_update_v2ray_tls_web()
         setsshd
     fi
     apt -y -f install
-    check_important_dependence_installed ca-certificates ca-certificates
-    check_important_dependence_installed lsb-release redhat-lsb-core
-    #系统版本
-    systemVersion=`lsb_release -r --short`
     systemctl stop nginx
     systemctl stop v2ray
     uninstall_firewall
@@ -426,7 +440,7 @@ install_update_v2ray_tls_web()
     fi
 
     green "正在安装依赖。。。。"
-    if [ $release == centos ] || [ $release == redhat ]; then
+    if [ $release == "centos" ] || [ $release == "other-redhat" ]; then
         install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
         ##libxml2-devel非必须
     else
@@ -882,7 +896,7 @@ uninstall_firewall()
     yum -y remove firewalld
     green "正在删除阿里云盾和腾讯云盾 (仅对阿里云和腾讯云服务器有效)。。。"
 #阿里云盾
-    if [ $release == ubuntu ] || [ $release == debian ]; then
+    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
         systemctl stop CmsGoAgent
         systemctl disable CmsGoAgent
         rm -rf /usr/local/cloudmonitor
@@ -1044,7 +1058,7 @@ get_kernel_info()
     do
         your_kernel_version=${your_kernel_version%.*}
     done
-    if [ $release == ubuntu ] || [ $release == debian ]; then
+    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
         local rc_version=`uname -r | cut -d - -f 2`
         if [[ $rc_version =~ "rc" ]] ; then
             rc_version=${rc_version##*'rc'}
@@ -1175,7 +1189,7 @@ install_bbr()
             yellow " 按回车键以继续。。。。"
             read -s
             rm -rf bbr2.sh
-            if [ $release == ubuntu ] || [ $release == debian ]; then
+            if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
                 if ! wget -O bbr2.sh https://github.com/yeyingorg/bbr2.sh/raw/master/bbr2.sh ; then
                     red    "获取bbr2脚本失败"
                     yellow "按回车键继续或者按ctrl+c终止"
@@ -1227,7 +1241,7 @@ install_bbr()
 #卸载多余内核
 remove_other_kernel()
 {
-    if [ $release == ubuntu ] || [ $release == debian ]; then
+    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
         local kernel_list_image=($(dpkg --list | grep 'linux-image' | awk '{print $2}'))
         local kernel_list_modules=($(dpkg --list | grep 'linux-modules' | awk '{print $2}'))
         local kernel_now=`uname -r`
