@@ -1370,6 +1370,7 @@ echo_end()
     tyblue " 地址：服务器ip"
     tyblue " 端口：443"
     tyblue " 用户ID：${v2id_1}"
+    tyblue " flow：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
     tyblue " 加密方式：none"
     tyblue " 传输协议：tcp"
     tyblue " 伪装类型：none"
@@ -1382,7 +1383,7 @@ echo_end()
     tyblue " 路径：空"
     tyblue " 底层传输安全：xtls/tls"
     tyblue " allowInsecure：false"
-    tyblue " Mux：使用XTLS必须关闭;使用TLS建议关闭"
+    tyblue " Mux：使用XTLS必须关闭;不使用XTLS也建议关闭"
     tyblue "----------------------------------------------------------"
     if [ $mode -eq 1 ]; then
         echo
@@ -1409,11 +1410,14 @@ echo_end()
         yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
     fi
     echo
+    yellow " 目前还没有客户端支持XTLS"
+    yellow " 若想使用XTLS，请自行写客户端配置文件，或耐心等待各大客户端更新"
+    echo
     tyblue " 如果要更换被镜像的伪装网站"
     tyblue " 修改$nginx_config"
     tyblue " 将v.qq.com修改为你要镜像的网站"
     echo
-    tyblue " 脚本最后更新时间：2020.09.21"
+    tyblue " 脚本最后更新时间：2020.09.27"
     echo
     red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
     tyblue " 2020.08"
