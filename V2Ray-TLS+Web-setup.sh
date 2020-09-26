@@ -595,9 +595,9 @@ readMode()
 {
     echo -e "\n\n\n"
     tyblue "------------------------------请选安装模式------------------------------"
-    tyblue " 1. (V2Ray-TCP+TLS) + (V2Ray-WebSocket+TLS) + Web"
+    tyblue " 1. (V2Ray-TCP+XTLS) + (V2Ray-WebSocket+TLS) + Web"
     green  "    适合有时使用cdn"
-    tyblue " 2. V2Ray-TCP+TLS+Web"
+    tyblue " 2. V2Ray-TCP+XTLS+Web"
     green  "    适合不使用cdn"
     tyblue " 3. V2Ray-WebSocket+TLS+Web"
     green  "    适合一直使用cdn"
@@ -1220,11 +1220,6 @@ install_bbr()
             install_bbr
             ;;
     esac
-    rm -rf bbr.sh
-    rm -rf update-kernel.sh
-    rm -rf tcp.sh
-    rm -rf bbr2.sh
-    rm -rf install_bbr.log*
 }
 
 #卸载多余内核
@@ -1370,7 +1365,7 @@ setsshd()
 echo_end()
 {
     echo -e "\n\n\n"
-    tyblue "-------------- V2Ray-TCP+TLS+Web (不走cdn) ---------------"
+    tyblue "-------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------"
     tyblue " 服务器类型：VLESS"
     tyblue " 地址：服务器ip"
     tyblue " 端口：443"
@@ -1385,8 +1380,9 @@ echo_end()
         tyblue " 伪装域名：${all_domains[@]} (任选其一)"
     fi
     tyblue " 路径：空"
-    tyblue " 底层传输安全：tls"
+    tyblue " 底层传输安全：xtls/tls"
     tyblue " allowInsecure：false"
+    tyblue " Mux：使用XTLS必须关闭;使用TLS建议关闭"
     tyblue "----------------------------------------------------------"
     if [ $mode -eq 1 ]; then
         echo
@@ -1481,6 +1477,7 @@ cat > $v2ray_config <<EOF
                 "clients": [
                     {
                         "id": "$v2id_1",
+                        "flow": "xtls-rprx-origin",
                         "level": 2
                     }
                 ],
@@ -1510,8 +1507,8 @@ cat >> $v2ray_config <<EOF
             },
             "streamSettings": {
                 "network": "tcp",
-                "security": "tls",
-                "tlsSettings": {
+                "security": "xtls",
+                "xtlsSettings": {
                     "alpn": [
                         "h2",
                         "http/1.1"
@@ -1848,7 +1845,7 @@ start_menu()
         local flag=1
         if [ $mode -eq 1 ]; then
             tyblue "-------------请输入你要修改的ID-------------"
-            tyblue " 1.VLESS服务器ID(V2Ray-TCP+TLS)"
+            tyblue " 1.VLESS服务器ID(V2Ray-TCP+XTLS)"
             tyblue " 2.VMess服务器ID(V2Ray-WebSocket+TLS)"
             echo
             choice=""
@@ -1888,7 +1885,7 @@ start_menu()
         fi
         get_base_information
         if [ $mode -eq 2 ]; then
-            red "V2Ray-TCP+Web模式没有path!!"
+            red "V2Ray-TCP+XTLS+Web模式没有path!!"
             exit 0
         fi
         tyblue "您现在的path是：$path"
