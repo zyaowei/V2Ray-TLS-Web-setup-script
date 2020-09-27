@@ -602,6 +602,8 @@ readMode()
     tyblue " 3. V2Ray-WebSocket+TLS+Web"
     green  "    适合一直使用cdn"
     echo
+    yellow " 注：XTLS完全兼容TLS"
+    echo
     mode=""
     while [[ x"$mode" != x"1" && x"$mode" != x"2" && x"$mode" != x"3" ]]
     do
@@ -1385,6 +1387,78 @@ echo_end()
     tyblue " allowInsecure：false"
     tyblue " Mux：使用XTLS必须关闭;不使用XTLS也建议关闭"
     tyblue "----------------------------------------------------------"
+    echo
+    yellow " 目前还没有客户端支持XTLS，请耐心等待各大客户端更新"
+    tyblue " 若想使用XTLS，请："
+    tyblue "  1. 将V2Ray版本升级至 v4.29.0+"
+    tyblue "  2. 自行编写V2Ray客户端配置"
+    echo
+    green  "--------适用于V2RayN的XTLS自定义配置--------"
+cat <<EOF
+{
+  "log": {
+    "access": "",
+    "error": "",
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "port": 10808,
+      "listen": "127.0.0.1",
+      "protocol": "socks",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      },
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "服务器ip",
+            "port": 443,
+            "users": [
+              {
+                "id": "${v2id_1}",
+                "flow": "xtls-rprx-origin-udp443",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "xtls",
+        "xtlsSettings": {
+          "allowInsecure": false,
+EOF
+    if [ ${#all_domains[@]} -eq 1 ]; then
+        echo '          "serverName": "'${all_domains[@]}'"'
+    else
+        echo '          "serverName": "'${all_domains[@]}' (任选其一)"'
+    fi
+cat <<EOF
+        }
+      },
+      "mux": {
+        "enabled": false,
+        "concurrency": -1
+      }
+    }
+  ]
+}
+EOF
     if [ $mode -eq 1 ]; then
         echo
         tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
@@ -1409,9 +1483,6 @@ echo_end()
         green  " 不使用cdn推荐第一种连接方式"
         yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
     fi
-    echo
-    yellow " 目前还没有客户端支持XTLS"
-    yellow " 若想使用XTLS，请自行写客户端配置文件，或耐心等待各大客户端更新"
     echo
     tyblue " 如果要更换被镜像的伪装网站"
     tyblue " 修改$nginx_config"
