@@ -1,5 +1,5 @@
 #!/bin/bash
-nginx_version="nginx-1.19.2"
+nginx_version="nginx-1.19.3"
 openssl_version="openssl-openssl-3.0.0-alpha6"
 v2ray_config="/usr/local/etc/v2ray/config.json"
 nginx_prefix="/etc/nginx"
@@ -357,21 +357,11 @@ install_nginx()
 install_update_v2ray()
 {
     green "正在安装/更新V2Ray。。。。"
-    if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
-        if ! curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh; then
-            yellow "获取V2Ray脚本失败"
-            yellow "按回车键继续或者按ctrl+c终止"
-            read -s
-            return 1
-        fi
-    fi
-    if ! bash install-release.sh; then
-        if ! bash install-release.sh; then
-            yellow "安装/更新V2Ray失败"
-            yellow "按回车键继续或者按ctrl+c终止"
-            read -s
-            return 1
-        fi
+    if ! bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh) && ! bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh); then
+        red    "安装/更新V2Ray失败"
+        yellow "按回车键继续或者按ctrl+c终止"
+        read -s
+        return 1
     fi
     return 0
 }
@@ -391,7 +381,7 @@ install_update_v2ray_tls_web()
                 fi
             fi
         else
-            if ! yum -y install $1; then
+            if ! yum -y --enablerepo=PowerTools install $1; then
                 yellow "依赖安装失败！！"
                 yellow "按回车键继续或者ctrl+c退出"
                 read -s
@@ -950,8 +940,7 @@ uninstall_firewall()
 remove_v2ray()
 {
     systemctl stop v2ray
-    curl -LROJ https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh
-    bash install-release.sh --remove
+    bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh) --remove
     systemctl disable v2ray
     rm -rf /usr/bin/v2ray
     rm -rf /etc/v2ray
@@ -1795,28 +1784,24 @@ start_menu()
         install_bbr
         rm -rf "$temp_dir"
     elif [ $choice -eq 4 ]; then
-        enter_temp_dir
         if install_update_v2ray; then
-            green "----------------升级完成----------------"
+            green "V2Ray升级完成！"
         else
-            red "升级失败！"
+            red   "V2Ray升级失败！"
         fi
-        rm -rf "$temp_dir"
     elif [ $choice -eq 5 ]; then
         choice=""
         while [ "$choice" != "y" -a "$choice" != "n" ]
         do
-            yellow "删除V2Ray-TLS+Web?(y/n)"
+            yellow "确定要删除吗?(y/n)"
             read choice
         done
         if [ "$choice" == "n" ]; then
             exit 0
         fi
-        enter_temp_dir
         remove_v2ray
         remove_nginx
-        green  "----------------V2Ray-TLS+Web已删除----------------"
-        rm -rf "$temp_dir"
+        green  "删除完成！"
     elif [ $choice -eq 6 ]; then
         if systemctl is-active v2ray > /dev/null 2>&1 && systemctl is-active nginx > /dev/null 2>&1; then
             local temp_is_active=1
