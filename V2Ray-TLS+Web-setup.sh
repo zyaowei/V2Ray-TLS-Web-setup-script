@@ -1389,12 +1389,12 @@ echo_end()
     tyblue " Mux：使用XTLS必须关闭;不使用XTLS也建议关闭"
     tyblue "----------------------------------------------------------"
     echo
-    yellow " 目前还没有客户端支持XTLS，请耐心等待各大客户端更新"
-    tyblue " 若想使用XTLS，请："
-    tyblue "  1. 将V2Ray版本升级至 v4.29.0+"
-    tyblue "  2. 自行编写V2Ray客户端配置"
+    yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
     echo
-    green  "--------适用于V2RayN的XTLS自定义配置--------"
+    yellow " 目前还没有客户端支持XTLS，请耐心等待各大客户端更新"
+    tyblue " 若想使用XTLS，请自行编写V2Ray客户端配置"
+    echo
+    green  "--------适用于V2RayN/V2RayNG的XTLS自定义配置--------"
 cat <<EOF
 {
   "log": {
