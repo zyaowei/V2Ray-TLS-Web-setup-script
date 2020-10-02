@@ -381,7 +381,7 @@ install_update_v2ray_tls_web()
                 fi
             fi
         else
-            if ! yum -y --enablerepo=PowerTools install $1; then
+            if ! yum -y install $1; then
                 yellow "依赖安装失败！！"
                 yellow "按回车键继续或者ctrl+c退出"
                 read -s
@@ -420,6 +420,9 @@ install_update_v2ray_tls_web()
 
     green "正在安装依赖。。。。"
     if [ $release == "centos" ] || [ $release == "other-redhat" ]; then
+        if version_ge $systemVersion 8; then
+            yum config-manager --set-enabled PowerTools || (yum -y install 'dnf-command(config-manager)' && yum config-manager --set-enabled PowerTools)
+        fi
         install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
         ##libxml2-devel非必须
     else
