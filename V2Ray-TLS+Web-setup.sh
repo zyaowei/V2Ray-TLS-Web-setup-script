@@ -42,7 +42,7 @@ fi
 #确保系统支持
 check_important_dependence_installed()
 {
-    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
         if ! dpkg -s $1 2>&1 >/dev/null; then
             if ! apt -y --no-install-recommends install $1; then
                 apt update
@@ -55,7 +55,7 @@ check_important_dependence_installed()
         fi
     else
         if ! rpm -q $2 2>&1 >/dev/null; then
-            if ! yum -y install $2; then
+            if ! $redhat_package_manager -y install $2; then
                 yellow "重要组件安装失败！！"
                 red "不支持的系统！！"
                 exit 1
@@ -71,52 +71,47 @@ else
     red "仅支持使用systemd的系统！"
     exit 1
 fi
-if command -v apt > /dev/null 2>&1 && command -v yum > /dev/null 2>&1; then
-    red "apt与yum同时存在，请卸载掉其中一个"
-    choice=""
-    while [[ "$choice" != "y" && "$choice" != "n" ]]
-    do
-        tyblue "自动卸载？(y/n)"
-        read choice
-    done
-    if [ $choice == y ]; then
-        apt -y purge yum
-        yum -y remove apt
-        if command -v apt > /dev/null 2>&1 && command -v yum > /dev/null 2>&1; then
-            yellow "卸载失败！！"
-            red "不支持的系统！！"
-            exit 1
-        fi
-    else
-        exit 0
+if [[ "$(type -P apt)" ]]; then
+    if [[ "$(type -P dnf)" ]] || [[ "$(type -P yum)" ]]; then
+        red "同时存在apt和yum/dnf"
+        red "不支持的系统！"
+        exit 1
     fi
-fi
-if ! command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
-    red "不支持的系统或apt/yum缺失"
-    exit 1
-elif command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
     release="other-debian"
-elif command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
+    redhat_package_manager="true"
+elif [[ "$(type -P dnf)" ]]; then
     release="other-redhat"
+    redhat_package_manager="dnf"
+elif [[ "$(type -P yum)" ]]; then
+    release="other-redhat"
+    redhat_package_manager="yum"
+else
+    red "不支持的系统或apt/yum/dnf缺失"
+    exit 1
 fi
 check_important_dependence_installed lsb-release redhat-lsb-core
 if lsb_release -a 2>/dev/null | grep -qi "ubuntu"; then
     release="ubuntu"
-elif lsb_release -a 2>/dev/null | grep -qi "debian"; then
-    release="debian"
-elif command -v apt > /dev/null 2>&1 && ! command -v yum > /dev/null 2>&1; then
-    release="other-debian"
 elif lsb_release -a 2>/dev/null | grep -qi "centos"; then
     release="centos"
-elif command -v yum > /dev/null 2>&1 && ! command -v apt > /dev/null 2>&1; then
-    release="other-redhat"
-else
-    red "不支持的系统！！"
-    exit 1
+elif lsb_release -a 2>/dev/null | grep -qi "fedora"; then
+    release="fedora"
 fi
 check_important_dependence_installed ca-certificates ca-certificates
-
-systemVersion=`lsb_release -r --short`
+systemVersion=`lsb_release -r -s`
+if [ $release == "fedora" ]; then
+    if version_ge $systemVersion 28; then
+        redhat_version=8
+    elif version_ge $systemVersion 19; then
+        redhat_version=7
+    elif version_ge $systemVersion 12; then
+        redhat_version=6
+    else
+        redhat_version=5
+    fi
+else
+    redhat_version=$systemVersion
+fi
 
 #判断内存是否太小
 if [ "$(cat /proc/meminfo |grep 'MemTotal' |awk '{print $3}' | tr [A-Z] [a-z])" == "kb" ]; then
@@ -241,7 +236,7 @@ get_cert()
     if ! $HOME/.acme.sh/acme.sh --issue -d $1 $temp -w ${nginx_prefix}/html -k ec-256 -ak ec-256 --pre-hook "mv ${nginx_prefix}/conf/nginx.conf ${nginx_prefix}/conf/nginx.conf.bak && cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --post-hook "mv ${nginx_prefix}/conf/nginx.conf.bak ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --ocsp; then
         $HOME/.acme.sh/acme.sh --issue -d $1 $temp -w ${nginx_prefix}/html -k ec-256 -ak ec-256 --pre-hook "mv ${nginx_prefix}/conf/nginx.conf ${nginx_prefix}/conf/nginx.conf.bak && cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --post-hook "mv ${nginx_prefix}/conf/nginx.conf.bak ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --ocsp --debug
     fi
-    if id nobody | grep -q nogroup; then
+    if id nobody | grep -qw 'nogroup'; then
         temp="chown -R nobody:nogroup ${nginx_prefix}/certs"
     else
         temp="chown -R nobody:nobody ${nginx_prefix}/certs"
@@ -344,12 +339,7 @@ install_nginx()
         backup_domains_web
     fi
     remove_nginx
-    if ! make install; then
-        red    "nginx安装失败！"
-        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
-        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
-        exit 1
-    fi
+    make install
     cd ..
 }
 
@@ -371,18 +361,29 @@ install_update_v2ray_tls_web()
 {
     install_dependence()
     {
-        if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+        if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
             if ! apt -y --no-install-recommends install $1; then
                 apt update
                 if ! apt -y --no-install-recommends install $1; then
                     yellow "依赖安装失败！！"
+                    green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
                     yellow "按回车键继续或者ctrl+c退出"
                     read -s
                 fi
             fi
         else
-            if ! yum -y install $1; then
+            if [ $release == "centos" ] && version_ge $systemVersion 8; then
+                if $redhat_package_manager --help | grep -q "\-\-enablerepo="; then
+                    local redhat_install_command="$redhat_package_manager -y --enablerepo=PowerTools install"
+                else
+                    local redhat_install_command="$redhat_package_manager -y --enablerepo PowerTools install"
+                fi
+            else
+                local redhat_install_command="$redhat_package_manager -y install"
+            fi
+            if ! $redhat_install_command $1; then
                 yellow "依赖安装失败！！"
+                green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
                 yellow "按回车键继续或者ctrl+c退出"
                 read -s
             fi
@@ -419,10 +420,7 @@ install_update_v2ray_tls_web()
     fi
 
     green "正在安装依赖。。。。"
-    if [ $release == "centos" ] || [ $release == "other-redhat" ]; then
-        if version_ge $systemVersion 8; then
-            yum config-manager --set-enabled PowerTools || (yum -y install 'dnf-command(config-manager)' && yum config-manager --set-enabled PowerTools)
-        fi
+    if [ $release == "centos" ] || [ $release == "fedora" ] || [ $release == "other-redhat" ]; then
         install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
         ##libxml2-devel非必须
     else
@@ -457,7 +455,7 @@ install_update_v2ray_tls_web()
         fi
     fi
     apt clean
-    yum clean all
+    $redhat_package_manager clean all
 
 ##安装nginx
     if [ $nginx_is_installed -eq 0 ] || [ $update -eq 1 ]; then
@@ -851,20 +849,20 @@ doupdate()
         updateSystem
         apt -y --purge autoremove
         apt clean
-        yum -y autoremove
-        yum clean all
+        $redhat_package_manager -y autoremove
+        $redhat_package_manager clean all
     elif [[ $release == "ubuntu" && $choice -eq 2 || $choice -eq 1 ]]; then
         tyblue "-----------------------即将开始更新-----------------------"
         yellow " 更新过程中若有问话/对话框，优先选择yes/y/第一个选项"
         yellow " 按回车键继续。。。"
         read -s
-        yum -y update
+        $redhat_package_manager -y update
         apt update
         apt -y full-upgrade
         apt -y --purge autoremove
         apt clean
-        yum -y autoremove
-        yum clean all
+        $redhat_package_manager -y autoremove
+        $redhat_package_manager clean all
     fi
 }
 
@@ -877,10 +875,10 @@ uninstall_firewall()
     apt -y purge ufw
     systemctl stop firewalld
     systemctl disable firewalld
-    yum -y remove firewalld
+    $redhat_package_manager -y remove firewalld
     green "正在删除阿里云盾和腾讯云盾 (仅对阿里云和腾讯云服务器有效)。。。"
 #阿里云盾
-    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
         systemctl stop CmsGoAgent
         systemctl disable CmsGoAgent
         rm -rf /usr/local/cloudmonitor
@@ -898,7 +896,7 @@ uninstall_firewall()
     rm -rf /etc/systemd/system/aliyun.service
     systemctl daemon-reload
     apt -y purge aliyun-assist
-    yum -y remove aliyun_assist
+    $redhat_package_manager -y remove aliyun_assist
     rm -rf /usr/local/share/aliyun-assist
     rm -rf /usr/sbin/aliyun_installer
     rm -rf /usr/sbin/aliyun-service
@@ -1042,7 +1040,7 @@ get_kernel_info()
     do
         your_kernel_version=${your_kernel_version%.*}
     done
-    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
         local rc_version=`uname -r | cut -d - -f 2`
         if [[ $rc_version =~ "rc" ]] ; then
             rc_version=${rc_version##*'rc'}
@@ -1173,7 +1171,7 @@ install_bbr()
             yellow " 按回车键以继续。。。。"
             read -s
             rm -rf bbr2.sh
-            if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+            if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
                 if ! wget -O bbr2.sh https://github.com/yeyingorg/bbr2.sh/raw/master/bbr2.sh ; then
                     red    "获取bbr2脚本失败"
                     yellow "按回车键继续或者按ctrl+c终止"
@@ -1220,7 +1218,7 @@ install_bbr()
 #卸载多余内核
 remove_other_kernel()
 {
-    if [ $release == "ubuntu" ] || [ $release == "debian" ] || [ $release == "other-debian" ]; then
+    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
         local kernel_list_image=($(dpkg --list | grep 'linux-image' | awk '{print $2}'))
         local kernel_list_modules=($(dpkg --list | grep 'linux-modules' | awk '{print $2}'))
         local kernel_now=`uname -r`
@@ -1260,7 +1258,7 @@ remove_other_kernel()
     else
         local kernel_list=($(rpm -qa |grep '^kernel-[0-9]\|^kernel-ml-[0-9]'))
         local kernel_list_devel=($(rpm -qa | grep '^kernel-devel\|^kernel-ml-devel'))
-        if version_ge $systemVersion 8; then
+        if version_ge $redhat_version 8; then
             local kernel_list_modules=($(rpm -qa |grep '^kernel-modules\|^kernel-ml-modules'))
             local kernel_list_core=($(rpm -qa | grep '^kernel-core\|^kernel-ml-core'))
         fi
@@ -1268,7 +1266,7 @@ remove_other_kernel()
         local ok_install=0
         for ((i=${#kernel_list[@]}-1;i>=0;i--))
         do
-            if [[ "${kernel_list[$i]}" =~ "$kernel_now" ]] ; then     
+            if [[ "${kernel_list[$i]}" =~ "$kernel_now" ]]; then
                 unset kernel_list[$i]
                 ((ok_install++))
             fi
@@ -1279,25 +1277,17 @@ remove_other_kernel()
             read -s
             return 1
         fi
-        ok_install=0
         for ((i=${#kernel_list_devel[@]}-1;i>=0;i--))
         do
-            if [[ "${kernel_list_devel[$i]}" =~ "$kernel_now" ]] ; then     
+            if [[ "${kernel_list_devel[$i]}" =~ "$kernel_now" ]]; then
                 unset kernel_list_devel[$i]
-                ((ok_install++))
             fi
         done
-        if [ $ok_install -lt 1 ] ; then
-            red "未发现正在使用的内核，可能已经被卸载"
-            yellow "按回车键继续。。。"
-            read -s
-            return 1
-        fi
-        if version_ge $systemVersion 8; then
+        if version_ge $redhat_version 8; then
             ok_install=0
             for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
             do
-                if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]] ; then     
+                if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]]; then
                     unset kernel_list_modules[$i]
                     ((ok_install++))
                 fi
@@ -1311,7 +1301,7 @@ remove_other_kernel()
             ok_install=0
             for ((i=${#kernel_list_core[@]}-1;i>=0;i--))
             do
-                if [[ "${kernel_list_core[$i]}" =~ "$kernel_now" ]] ; then     
+                if [[ "${kernel_list_core[$i]}" =~ "$kernel_now" ]]; then
                     unset kernel_list_core[$i]
                     ((ok_install++))
                 fi
@@ -1323,14 +1313,14 @@ remove_other_kernel()
                 return 1
             fi
         fi
-        if ([ ${#kernel_list[@]} -eq 0 ] && [ ${#kernel_list_devel[@]} -eq 0 ]) && (! version_ge $systemVersion 8 || ([ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_core[@]} -eq 0 ])); then
+        if ([ ${#kernel_list[@]} -eq 0 ] && [ ${#kernel_list_devel[@]} -eq 0 ]) && (! version_ge $redhat_version 8 || ([ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_core[@]} -eq 0 ])); then
             yellow "没有内核可卸载"
             return 0
         fi
-        if version_ge $systemVersion 8; then
-            yum -y remove ${kernel_list[@]} ${kernel_list_modules[@]} ${kernel_list_core[@]} ${kernel_list_devel[@]}
+        if version_ge $redhat_version 8; then
+            $redhat_package_manager -y remove ${kernel_list[@]} ${kernel_list_modules[@]} ${kernel_list_core[@]} ${kernel_list_devel[@]}
         else
-            yum -y remove ${kernel_list[@]} ${kernel_list_devel[@]}
+            $redhat_package_manager -y remove ${kernel_list[@]} ${kernel_list_devel[@]}
         fi
     fi
     green "-------------------卸载完成-------------------"
