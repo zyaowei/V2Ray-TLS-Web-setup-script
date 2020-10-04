@@ -14,8 +14,6 @@ port=""
 path=""
 v2id=""
 
-latest_kernel_version=""
-
 #定义几个颜色
 tyblue()                           #天依蓝
 {
@@ -63,6 +61,10 @@ check_important_dependence_installed()
         fi
     fi
 }
+version_ge()
+{
+    test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"
+}
 if [[ -f /.dockerenv ]] || grep -q 'docker\|lxc' /proc/1/cgroup && [[ "$(type -P systemctl)" ]]; then
     true
 elif [[ -d /run/systemd/system ]] || grep -q systemd <(ls -l /sbin/init); then
@@ -97,7 +99,6 @@ elif lsb_release -a 2>/dev/null | grep -qi "centos"; then
 elif lsb_release -a 2>/dev/null | grep -qi "fedora"; then
     release="fedora"
 fi
-check_important_dependence_installed ca-certificates ca-certificates
 systemVersion=`lsb_release -r -s`
 if [ $release == "fedora" ]; then
     if version_ge $systemVersion 28; then
@@ -112,6 +113,7 @@ if [ $release == "fedora" ]; then
 else
     redhat_version=$systemVersion
 fi
+check_important_dependence_installed ca-certificates ca-certificates
 
 #判断内存是否太小
 if [ "$(cat /proc/meminfo |grep 'MemTotal' |awk '{print $3}' | tr [A-Z] [a-z])" == "kb" ]; then
@@ -124,12 +126,36 @@ else
     mem_ok=2
 fi
 
-######
 if [ -e /usr/bin/v2ray ] && [ -e /etc/nginx ]; then
     yellow "当前安装的V2Ray版本过旧，脚本已不再支持！"
     yellow "请选择1选项重新安装"
     sleep 3s
 fi
+
+#获取随机端口号
+get_random_port()
+{
+    port=`shuf -i 1000-65535 -n1`
+    while netstat -at | awk '{print $4}' | tail -n +3 | awk -F : '{print $2}' | grep -q ^$port$ || netstat -at | awk '{print $4}' | tail -n +3 | awk -F : '{print $2}' | grep -q ^$port$
+    do
+        port=`shuf -i 1000-65535 -n1`
+    done
+}
+
+#将域名列表转化为一个数组
+get_all_domains()
+{
+    unset all_domains
+    for ((i=0;i<${#domain_list[@]};i++))
+    do
+        if [ ${domainconfig_list[i]} -eq 1 ]; then
+            all_domains+=("www.${domain_list[i]}")
+            all_domains+=("${domain_list[i]}")
+        else
+            all_domains+=("${domain_list[i]}")
+        fi
+    done
+}
 
 #判断是否已经安装
 check_is_installed()
@@ -151,584 +177,104 @@ check_is_installed()
     fi
 }
 
-#版本比较函数
-version_ge()
+#配置sshd
+setsshd()
 {
-    test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"
-}
-
-get_all_domains()
-{
-    unset all_domains
-    for ((i=0;i<${#domain_list[@]};i++))
-    do
-        if [ ${domainconfig_list[i]} -eq 1 ]; then
-            all_domains+=("www.${domain_list[i]}")
-            all_domains+=("${domain_list[i]}")
-        else
-            all_domains+=("${domain_list[i]}")
-        fi
-    done
-}
-
-#配置nginx
-config_nginx()
-{
-    config_nginx_init
-    local i
-    get_all_domains
-cat > $nginx_config<<EOF
-server {
-    listen 80 fastopen=100 reuseport default_server;
-    listen [::]:80 fastopen=100 reuseport default_server;
-    return 301 https://${all_domains[0]};
-}
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${all_domains[@]};
-    return 301 https://\$host\$request_uri;
-}
-server {
-    listen unix:${nginx_prefix}/unixsocks_temp/default.sock default_server;
-    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2 default_server;
-    return 301 https://${all_domains[0]};
-}
-EOF
-    for ((i=0;i<${#domain_list[@]};i++))
-    do
-cat >> $nginx_config<<EOF
-server {
-    listen unix:${nginx_prefix}/unixsocks_temp/default.sock;
-    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2;
-EOF
-        if [ ${domainconfig_list[i]} -eq 1 ]; then
-            echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
-        else
-            echo "    server_name ${domain_list[i]};" >> $nginx_config
-        fi
-        if [ ${pretend_list[i]} -eq 1 ]; then
-            echo "    return 403;" >> $nginx_config
-        elif [ ${pretend_list[i]} -eq 2 ]; then
-cat >> $nginx_config<<EOF
-    location / {
-        proxy_pass https://v.qq.com;
-        proxy_set_header referer "https://v.qq.com";
-    }
-EOF
-        elif [ ${pretend_list[i]} -eq 3 ]; then
-            echo "    root ${nginx_prefix}/html/${domain_list[i]};" >> $nginx_config
-        fi
-        echo "}" >> $nginx_config
-    done
-}
-
-#获取证书 参数: domain domainconfig
-get_cert()
-{
-    mv $v2ray_config $v2ray_config.bak
-    echo "{}" >> $v2ray_config
-    if [ $2 -eq 1 ]; then
-        local temp="-d www.$1"
-    else
-        local temp=""
-    fi
-    if ! $HOME/.acme.sh/acme.sh --issue -d $1 $temp -w ${nginx_prefix}/html -k ec-256 -ak ec-256 --pre-hook "mv ${nginx_prefix}/conf/nginx.conf ${nginx_prefix}/conf/nginx.conf.bak && cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --post-hook "mv ${nginx_prefix}/conf/nginx.conf.bak ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --ocsp; then
-        $HOME/.acme.sh/acme.sh --issue -d $1 $temp -w ${nginx_prefix}/html -k ec-256 -ak ec-256 --pre-hook "mv ${nginx_prefix}/conf/nginx.conf ${nginx_prefix}/conf/nginx.conf.bak && cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --post-hook "mv ${nginx_prefix}/conf/nginx.conf.bak ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --ocsp --debug
-    fi
-    if id nobody | grep -qw 'nogroup'; then
-        temp="chown -R nobody:nogroup ${nginx_prefix}/certs"
-    else
-        temp="chown -R nobody:nobody ${nginx_prefix}/certs"
-    fi
-    if ! $HOME/.acme.sh/acme.sh --installcert -d $1 --key-file ${nginx_prefix}/certs/${1}.key --fullchain-file ${nginx_prefix}/certs/${1}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
-        yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
-        yellow "按回车键继续。。。"
-        read -s
-    fi
-    mv $v2ray_config.bak $v2ray_config
-}
-get_all_certs()
-{
-    local i
-    for ((i=0;i<${#domain_list[@]};i++))
-    do
-        get_cert ${domain_list[i]} ${domainconfig_list[i]}
-    done
-}
-
-#获取配置信息 path port v2id_1 v2id_2 mode
-get_base_information()
-{
-    v2id_1=`grep id $v2ray_config | head -n 1`
-    v2id_1=${v2id_1##*' '}
-    v2id_1=${v2id_1#*'"'}
-    v2id_1=${v2id_1%'"'*}
-    if [ $(grep -E "vmess|vless" $v2ray_config | wc -l) -eq 2 ]; then
-        mode=1
-        port=`grep port $v2ray_config | tail -n 1`
-        port=${port##*' '}
-        port=${port%%,*}
-        path=`grep path $v2ray_config`
-        path=${path##*' '}
-        path=${path#*'"'}
-        path=${path%'"'*}
-        v2id_2=`grep id $v2ray_config | tail -n 1`
-        v2id_2=${v2id_2##*' '}
-        v2id_2=${v2id_2#*'"'}
-        v2id_2=${v2id_2%'"'*}
-    else
-        mode=2
-        port=""
-        path=""
-        v2id_2=""
-    fi
-}
-
-#获取域名列表
-get_domainlist()
-{
-    unset domain_list
-    domain_list=($(grep server_name $nginx_config | sed 's/;//g' | awk 'NR>1 {print $NF}'))
-    local line
-    local i
-    for i in ${!domain_list[@]}
-    do
-        line=`grep -n "server_name www.${domain_list[i]} ${domain_list[i]};" $nginx_config | tail -n 1 | awk -F : '{print $1}'`
-        if [ "$line" == "" ]; then
-            line=`grep -n "server_name ${domain_list[i]};" $nginx_config | tail -n 1 | awk -F : '{print $1}'`
-            domainconfig_list[i]=2
-        else
-            domainconfig_list[i]=1
-        fi
-        if awk 'NR=='"$(($line+1))"' {print $0}' $nginx_config | grep -q "return 403"; then
-            pretend_list[i]=1
-        elif awk 'NR=='"$(($line+1))"' {print $0}' $nginx_config | grep -q "location / {"; then
-            pretend_list[i]=2
-        else
-            pretend_list[i]=3
-        fi
-    done
-}
-
-#安装nignx
-install_nginx()
-{
-    green "正在编译和安装nginx。。。。"
-    if ! wget -O ${nginx_version}.tar.gz https://nginx.org/download/${nginx_version}.tar.gz ; then
-        red    "获取nginx失败"
-        yellow "按回车键继续或者按ctrl+c终止"
-        read -s
-    fi
-    tar -zxf ${nginx_version}.tar.gz
-    if ! wget -O ${openssl_version}.tar.gz https://github.com/openssl/openssl/archive/${openssl_version#*-}.tar.gz ; then
-        red    "获取openssl失败"
-        yellow "按回车键继续或者按ctrl+c终止"
-        read -s
-    fi
-    tar -zxf ${openssl_version}.tar.gz
-    cd ${nginx_version}
-    ./configure --prefix=${nginx_prefix} --with-openssl=../$openssl_version --with-openssl-opt="enable-ec_nistp_64_gcc_128 shared threads zlib-dynamic sctp" --with-mail=dynamic --with-mail_ssl_module --with-stream=dynamic --with-stream_ssl_module --with-stream_realip_module --with-stream_geoip_module=dynamic --with-stream_ssl_preread_module --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_geoip_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_auth_request_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-pcre --with-libatomic --with-compat --with-cpp_test_module --with-google_perftools_module --with-file-aio --with-threads --with-poll_module --with-select_module --with-cc-opt="-Wno-error -g0 -O3"
-    if ! make; then
-        red    "nginx编译失败！"
-        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
-        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
-        exit 1
-    fi
-    if [ $update == 1 ]; then
-        backup_domains_web
-    fi
-    remove_nginx
-    make install
-    cd ..
-}
-
-#安装/更新V2Ray
-install_update_v2ray()
-{
-    green "正在安装/更新V2Ray。。。。"
-    if ! bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh) && ! bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh); then
-        red    "安装/更新V2Ray失败"
-        yellow "按回车键继续或者按ctrl+c终止"
-        read -s
-        return 1
-    fi
-    return 0
-}
-
-#安装v2ray_tls_web
-install_update_v2ray_tls_web()
-{
-    install_dependence()
-    {
-        if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
-            if ! apt -y --no-install-recommends install $1; then
-                apt update
-                if ! apt -y --no-install-recommends install $1; then
-                    yellow "依赖安装失败！！"
-                    green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
-                    yellow "按回车键继续或者ctrl+c退出"
-                    read -s
-                fi
-            fi
-        else
-            if [ $release == "centos" ] && version_ge $systemVersion 8; then
-                if $redhat_package_manager --help | grep -q "\-\-enablerepo="; then
-                    local redhat_install_command="$redhat_package_manager -y --enablerepo=PowerTools install"
-                else
-                    local redhat_install_command="$redhat_package_manager -y --enablerepo PowerTools install"
-                fi
-            else
-                local redhat_install_command="$redhat_package_manager -y install"
-            fi
-            if ! $redhat_install_command $1; then
-                yellow "依赖安装失败！！"
-                green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
-                yellow "按回车键继续或者ctrl+c退出"
-                read -s
-            fi
-        fi
-    }
-    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/ssh/sshd_config ; then
-        setsshd
-    fi
-    apt -y -f install
-    systemctl stop nginx
-    systemctl stop v2ray
-    uninstall_firewall
-    doupdate
-    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf ; then
-        echo ' ' >> /etc/sysctl.conf
-        echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/sysctl.conf
-    fi
-    if ! grep -q "net.ipv4.tcp_fastopen = 3" /etc/sysctl.conf || ! sysctl net.ipv4.tcp_fastopen | grep -q 3 ; then
-        sed -i '/net.ipv4.tcp_fastopen/d' /etc/sysctl.conf
-        echo 'net.ipv4.tcp_fastopen = 3' >> /etc/sysctl.conf
-        sysctl -p
-    fi
-    enter_temp_dir
-    install_bbr
-    apt -y -f install
-
-#读取信息
-    if [ $update == 0 ]; then
-        readDomain
-        readMode
-    else
-        get_base_information
-        get_domainlist
-    fi
-
-    green "正在安装依赖。。。。"
-    if [ $release == "centos" ] || [ $release == "fedora" ] || [ $release == "other-redhat" ]; then
-        install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
-        ##libxml2-devel非必须
-    else
-        if [ "$release" == "ubuntu" ] && [ "$systemVersion" == "20.04" ]; then
-            install_dependence "gcc-10 g++-10"
-            apt -y purge gcc g++ gcc-9 g++-9 gcc-8 g++-8 gcc-7 g++-7
-            apt -y autopurge
-            install_dependence "gcc-10 g++-10 libgoogle-perftools-dev libatomic-ops-dev libperl-dev libxslt-dev zlib1g-dev libpcre3-dev libgeoip-dev libgd-dev libxml2-dev libsctp-dev wget unzip curl make openssl cron"
-            ln -s -f /usr/bin/gcc-10                         /usr/bin/gcc
-            ln -s -f /usr/bin/gcc-10                         /usr/bin/cc
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-10        /usr/bin/x86_64-linux-gnu-gcc
-            ln -s -f /usr/bin/g++-10                         /usr/bin/g++
-            ln -s -f /usr/bin/g++-10                         /usr/bin/c++
-            ln -s -f /usr/bin/x86_64-linux-gnu-g++-10        /usr/bin/x86_64-linux-gnu-g++
-            ln -s -f /usr/bin/gcc-ar-10                      /usr/bin/gcc-ar
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-ar-10     /usr/bin/x86_64-linux-gnu-gcc-ar
-            ln -s -f /usr/bin/gcc-nm-10                      /usr/bin/gcc-nm
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-nm-10     /usr/bin/x86_64-linux-gnu-gcc-nm
-            ln -s -f /usr/bin/gcc-ranlib-10                  /usr/bin/gcc-ranlib
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-ranlib-10 /usr/bin/x86_64-linux-gnu-gcc-ranlib
-            ln -s -f /usr/bin/cpp-10                         /usr/bin/cpp
-            ln -s -f /usr/bin/x86_64-linux-gnu-cpp-10        /usr/bin/x86_64-linux-gnu-cpp
-            ln -s -f /usr/bin/gcov-10                        /usr/bin/gcov
-            ln -s -f /usr/bin/gcov-dump-10                   /usr/bin/gcov-dump
-            ln -s -f /usr/bin/gcov-tool-10                   /usr/bin/gcov-tool
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcov-10       /usr/bin/x86_64-linux-gnu-gcov
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcov-dump-10  /usr/bin/x86_64-linux-gnu-gcov-dump
-            ln -s -f /usr/bin/x86_64-linux-gnu-gcov-tool-10  /usr/bin/x86_64-linux-gnu-gcov-tool
-        else
-            install_dependence "gcc g++ libgoogle-perftools-dev libatomic-ops-dev libperl-dev libxslt-dev zlib1g-dev libpcre3-dev libgeoip-dev libgd-dev libxml2-dev libsctp-dev wget unzip curl make openssl cron"
-            ##libxml2-dev非必须
-        fi
-    fi
-    apt clean
-    $redhat_package_manager clean all
-
-##安装nginx
-    if [ $nginx_is_installed -eq 0 ] || [ $update -eq 1 ]; then
-        install_nginx
-    else
-        tyblue "---------------检测到nginx已存在---------------"
-        tyblue " 1. 尝试使用现有nginx"
-        tyblue " 2. 卸载现有nginx并重新编译安装"
-        echo
-        yellow " 若安装完成后nginx无法启动，请卸载并重新安装"
-        green  " 若想更新nginx，请选择2"
-        echo
-        choice=""
-        while [ "$choice" != "1" ] && [ "$choice" != "2" ]
-        do
-            read -p "您的选择是：" choice
-        done
-        if [ $choice -eq 2 ]; then
-            install_nginx
-        fi
-    fi
-    mkdir ${nginx_prefix}/conf.d
-    mkdir ${nginx_prefix}/certs
-    config_service_nginx
-
-#安装V2Ray
-    remove_v2ray
-    install_update_v2ray
-    systemctl enable v2ray
-
-    green "正在获取证书。。。。"
-    curl https://get.acme.sh | sh
-    $HOME/.acme.sh/acme.sh --upgrade --auto-upgrade
-    get_all_certs
-
-    if [ $update == 0 ]; then
-        path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
-        path="/$path"
-        v2id_1=`cat /proc/sys/kernel/random/uuid`
-        v2id_2=`cat /proc/sys/kernel/random/uuid`
-        get_random_port
-    fi
-    config_v2ray
-    config_nginx
-    if [ $update == 1 ]; then
-        mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
-    else
-        get_all_webs
-    fi
-    sleep 2s
-    systemctl restart nginx
-    systemctl restart v2ray
-    if [ $update == 1 ]; then
-        green "-------------------升级完成-------------------"
-    else
-        green "-------------------安装完成-------------------"
-    fi
-    echo_end
-    rm -rf "$temp_dir"
-}
-
-#读取域名
-readDomain()
-{
-    check_domain()
-    {
-        local temp=${1%%.*}
-        if [ "$temp" == "www" ]; then
-            red "域名前面不要带www！"
-            return 0
-        elif [ "$1" == "" ]; then
-            return 0
-        else
-            return 1
-        fi
-    }
-    local domain=""
-    local domainconfig=""
-    local pretend=""
-    echo -e "\n\n\n"
-    tyblue "--------------------请选择域名解析情况--------------------"
-    tyblue " 1. 一级域名 和 www.一级域名 都解析到此服务器上"
-    green  "    如：123.com 和 www.123.com 都解析到此服务器上"
-    tyblue " 2. 仅某个域名解析到此服务器上"
-    green  "    如：123.com 或 www.123.com 或 xxx.123.com 中的某一个解析到此服务器上"
     echo
-    while [ "$domainconfig" != "1" -a "$domainconfig" != "2" ]
+    tyblue "------------------------------------------"
+    tyblue " 安装可能需要比较长的时间(5-40分钟)"
+    tyblue " 如果和ssh断开连接将会很麻烦"
+    tyblue " 设置ssh连接超时时间将大大降低断连可能性"
+    tyblue "------------------------------------------"
+    choice=""
+    while [ "$choice" != "y" -a "$choice" != "n" ]
     do
-        read -p "您的选择是：" domainconfig
+        tyblue "是否设置ssh连接超时时间？(y/n)"
+        read choice
     done
-    case "$domainconfig" in
-        1)
-            echo
-            tyblue "--------------------请输入一级域名(不带www.，http，:，/)--------------------"
-            read -p "请输入域名：" domain
-            while check_domain $domain ;
-            do
-                read -p "请输入域名：" domain
-            done
-            ;;
-        2)
-            echo
-            tyblue "----------------请输入解析到此服务器的域名(不带http，:，/)----------------"
-            read -p "请输入域名：" domain
-            ;;
-    esac
-    echo -e "\n\n\n"
-    tyblue "------------------------------请选择要伪装的网站页面------------------------------"
-    tyblue " 1. 403页面 (模拟网站后台)"
-    green  "    说明：大型网站几乎都有使用网站后台，比如bilibili的每个视频都是由"
-    green  "    另外一个域名提供的，直接访问那个域名的根目录将返回403或其他错误页面"
-    tyblue " 2. 镜像腾讯视频网站"
-    green  "    说明：是真镜像站，非链接跳转，默认为腾讯视频，搭建完成后可以自己修改，可能构成侵权"
-    tyblue " 3. nextcloud登陆页面"
-    green  "    说明：nextclound是开源的私人网盘服务，假装你搭建了一个私人网盘(可以换成别的自定义网站)"
-    echo
-    while [[ x"$pretend" != x"1" && x"$pretend" != x"2" && x"$pretend" != x"3" ]]
-    do
-        read -p "您的选择是：" pretend
-    done
-    domain_list+=("$domain")
-    domainconfig_list+=("$domainconfig")
-    pretend_list+=("$pretend")
-}
-
-#读取安装模式
-readMode()
-{
-    echo -e "\n\n\n"
-    tyblue "------------------------------请选安装模式------------------------------"
-    tyblue " 1. (V2Ray-TCP+XTLS) + (V2Ray-WebSocket+TLS) + Web"
-    green  "    适合有时使用cdn"
-    tyblue " 2. V2Ray-TCP+XTLS+Web"
-    green  "    适合不使用cdn"
-    tyblue " 3. V2Ray-WebSocket+TLS+Web"
-    green  "    适合一直使用cdn"
-    echo
-    yellow " 注：XTLS完全兼容TLS"
-    echo
-    mode=""
-    while [[ x"$mode" != x"1" && x"$mode" != x"2" && x"$mode" != x"3" ]]
-    do
-        read -p "您的选择是：" mode
-    done
-    if [ $mode -eq 3 ]; then
-        yellow "请使用这个脚本安装：https://github.com/kirin10000/V2Ray-WebSocket-TLS-Web-setup-script"
+    if [ $choice == y ]; then
+        echo >> /etc/ssh/sshd_config
+        echo "ClientAliveInterval 30" >> /etc/ssh/sshd_config
+        echo "ClientAliveCountMax 60" >> /etc/ssh/sshd_config
+        echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/ssh/sshd_config
+        service sshd restart
+        green  "----------------------配置完成----------------------"
+        tyblue " 请重新进行ssh连接(即重新登陆服务器)，并再次运行此脚本"
+        yellow " 按回车键退出。。。。"
+        read -s
         exit 0
     fi
 }
 
-#配置nginx
-config_nginx_init()
+#删除防火墙和阿里云盾
+uninstall_firewall()
 {
-cat > ${nginx_prefix}/conf/nginx.conf <<EOF
+    green "正在删除防火墙。。。"
+    ufw disable
+    apt -y purge firewalld
+    apt -y purge ufw
+    systemctl stop firewalld
+    systemctl disable firewalld
+    $redhat_package_manager -y remove firewalld
+    green "正在删除阿里云盾和腾讯云盾 (仅对阿里云和腾讯云服务器有效)。。。"
+#阿里云盾
+    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
+        systemctl stop CmsGoAgent
+        systemctl disable CmsGoAgent
+        rm -rf /usr/local/cloudmonitor
+        rm -rf /etc/systemd/system/CmsGoAgent.service
+        systemctl daemon-reload
+    else
+        systemctl stop cloudmonitor
+        /etc/rc.d/init.d/cloudmonitor remove
+        rm -rf /usr/local/cloudmonitor
+        systemctl daemon-reload
+    fi
 
-user  root root;
-worker_processes  auto;
+    systemctl stop aliyun
+    systemctl disable aliyun
+    rm -rf /etc/systemd/system/aliyun.service
+    systemctl daemon-reload
+    apt -y purge aliyun-assist
+    $redhat_package_manager -y remove aliyun_assist
+    rm -rf /usr/local/share/aliyun-assist
+    rm -rf /usr/sbin/aliyun_installer
+    rm -rf /usr/sbin/aliyun-service
+    rm -rf /usr/sbin/aliyun-service.backup
 
-#error_log  logs/error.log;
-#error_log  logs/error.log  notice;
-#error_log  logs/error.log  info;
-
-#pid        logs/nginx.pid;
-google_perftools_profiles ${nginx_prefix}/tcmalloc_temp/tcmalloc;
-
-events {
-    worker_connections  1024;
-}
-
-
-http {
-    include       mime.types;
-    default_type  application/octet-stream;
-
-    #log_format  main  '\$remote_addr - \$remote_user [\$time_local] "\$request" '
-    #                  '\$status \$body_bytes_sent "\$http_referer" '
-    #                  '"\$http_user_agent" "\$http_x_forwarded_for"';
-
-    #access_log  logs/access.log  main;
-
-    sendfile        on;
-    #tcp_nopush     on;
-
-    #keepalive_timeout  0;
-    keepalive_timeout  65;
-
-    #gzip  on;
-
-    include       $nginx_config;
-    #server {
-        #listen       80;
-        #server_name  localhost;
-
-        #charset koi8-r;
-
-        #access_log  logs/host.access.log  main;
-
-        #location / {
-        #    root   html;
-        #    index  index.html index.htm;
-        #}
-
-        #error_page  404              /404.html;
-
-        # redirect server error pages to the static page /50x.html
-        #
-        #error_page   500 502 503 504  /50x.html;
-        #location = /50x.html {
-        #    root   html;
-        #}
-
-        # proxy the PHP scripts to Apache listening on 127.0.0.1:80
-        #
-        #location ~ \\.php\$ {
-        #    proxy_pass   http://127.0.0.1;
-        #}
-
-        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
-        #
-        #location ~ \\.php\$ {
-        #    root           html;
-        #    fastcgi_pass   127.0.0.1:9000;
-        #    fastcgi_index  index.php;
-        #    fastcgi_param  SCRIPT_FILENAME  /scripts\$fastcgi_script_name;
-        #    include        fastcgi_params;
-        #}
-
-        # deny access to .htaccess files, if Apache's document root
-        # concurs with nginx's one
-        #
-        #location ~ /\\.ht {
-        #    deny  all;
-        #}
-    #}
-
-
-    # another virtual host using mix of IP-, name-, and port-based configuration
-    #
-    #server {
-    #    listen       8000;
-    #    listen       somename:8080;
-    #    server_name  somename  alias  another.alias;
-
-    #    location / {
-    #        root   html;
-    #        index  index.html index.htm;
-    #    }
-    #}
-
-
-    # HTTPS server
-    #
-    #server {
-    #    listen       443 ssl;
-    #    server_name  localhost;
-
-    #    ssl_certificate      cert.pem;
-    #    ssl_certificate_key  cert.key;
-
-    #    ssl_session_cache    shared:SSL:1m;
-    #    ssl_session_timeout  5m;
-
-    #    ssl_ciphers  HIGH:!aNULL:!MD5;
-    #    ssl_prefer_server_ciphers  on;
-
-    #    location / {
-    #        root   html;
-    #        index  index.html index.htm;
-    #    }
-    #}
-
-}
-EOF
+    pkill -9 AliYunDun
+    pkill -9 AliHids
+    /etc/init.d/aegis uninstall
+    rm -rf /usr/local/aegis
+    rm -rf /etc/init.d/aegis
+    rm -rf /etc/rc2.d/S80aegis
+    rm -rf /etc/rc3.d/S80aegis
+    rm -rf /etc/rc4.d/S80aegis
+    rm -rf /etc/rc5.d/S80aegis
+#腾讯云盾
+    /usr/local/qcloud/stargate/admin/uninstall.sh
+    /usr/local/qcloud/YunJing/uninst.sh
+    /usr/local/qcloud/monitor/barad/admin/uninstall.sh
+    systemctl daemon-reload
+    systemctl stop YDService
+    systemctl disable YDService
+    rm -rf /lib/systemd/system/YDService.service
+    systemctl daemon-reload
+    sed -i 's#/usr/local/qcloud#rcvtevyy4f5d#g' /etc/rc.local
+    sed -i '/rcvtevyy4f5d/d' /etc/rc.local
+    rm -rf $(find /etc/udev/rules.d -iname *qcloud* 2>/dev/null)
+    pkill -9 YDService
+    pkill -9 YDLive
+    pkill -9 sgagent
+    pkill -9 /usr/local/qcloud
+    pkill -9 barad_agent
+    rm -rf /usr/local/qcloud
+    rm -rf /usr/local/yd.socket.client
+    rm -rf /usr/local/yd.socket.server
+    mkdir /usr/local/qcloud
+    mkdir /usr/local/qcloud/action
+    mkdir /usr/local/qcloud/action/login_banner.sh
+    mkdir /usr/local/qcloud/action/action.sh
 }
 
 #升级系统组件
@@ -846,11 +392,10 @@ doupdate()
         done
     fi
     if [[ "$release" == "ubuntu" && "$choice" == "1" ]] ; then
+        apt -y --purge autoremove
         updateSystem
         apt -y --purge autoremove
         apt clean
-        $redhat_package_manager -y autoremove
-        $redhat_package_manager clean all
     elif [[ $release == "ubuntu" && $choice -eq 2 || $choice -eq 1 ]]; then
         tyblue "-----------------------即将开始更新-----------------------"
         yellow " 更新过程中若有问话/对话框，优先选择yes/y/第一个选项"
@@ -866,196 +411,219 @@ doupdate()
     fi
 }
 
-#删除防火墙和阿里云盾
-uninstall_firewall()
+#进入工作目录
+enter_temp_dir()
 {
-    green "正在删除防火墙。。。"
-    ufw disable
-    apt -y purge firewalld
-    apt -y purge ufw
-    systemctl stop firewalld
-    systemctl disable firewalld
-    $redhat_package_manager -y remove firewalld
-    green "正在删除阿里云盾和腾讯云盾 (仅对阿里云和腾讯云服务器有效)。。。"
-#阿里云盾
-    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
-        systemctl stop CmsGoAgent
-        systemctl disable CmsGoAgent
-        rm -rf /usr/local/cloudmonitor
-        rm -rf /etc/systemd/system/CmsGoAgent.service
-        systemctl daemon-reload
-    else
-        systemctl stop cloudmonitor
-        /etc/rc.d/init.d/cloudmonitor remove
-        rm -rf /usr/local/cloudmonitor
-        systemctl daemon-reload
-    fi
-
-    systemctl stop aliyun
-    systemctl disable aliyun
-    rm -rf /etc/systemd/system/aliyun.service
-    systemctl daemon-reload
-    apt -y purge aliyun-assist
-    $redhat_package_manager -y remove aliyun_assist
-    rm -rf /usr/local/share/aliyun-assist
-    rm -rf /usr/sbin/aliyun_installer
-    rm -rf /usr/sbin/aliyun-service
-    rm -rf /usr/sbin/aliyun-service.backup
-
-    pkill -9 AliYunDun
-    pkill -9 AliHids
-    /etc/init.d/aegis uninstall
-    rm -rf /usr/local/aegis
-    rm -rf /etc/init.d/aegis
-    rm -rf /etc/rc2.d/S80aegis
-    rm -rf /etc/rc3.d/S80aegis
-    rm -rf /etc/rc4.d/S80aegis
-    rm -rf /etc/rc5.d/S80aegis
-#腾讯云盾
-    /usr/local/qcloud/stargate/admin/uninstall.sh
-    /usr/local/qcloud/YunJing/uninst.sh
-    /usr/local/qcloud/monitor/barad/admin/uninstall.sh
-    systemctl daemon-reload
-    systemctl stop YDService
-    systemctl disable YDService
-    rm -rf /lib/systemd/system/YDService.service
-    systemctl daemon-reload
-    sed -i 's#/usr/local/qcloud#rcvtevyy4f5d#g' /etc/rc.local
-    sed -i '/rcvtevyy4f5d/d' /etc/rc.local
-    rm -rf $(find /etc/udev/rules.d -iname *qcloud* 2>/dev/null)
-    pkill -9 YDService
-    pkill -9 YDLive
-    pkill -9 sgagent
-    pkill -9 /usr/local/qcloud
-    pkill -9 barad_agent
-    rm -rf /usr/local/qcloud
-    rm -rf /usr/local/yd.socket.client
-    rm -rf /usr/local/yd.socket.server
-    mkdir /usr/local/qcloud
-    mkdir /usr/local/qcloud/action
-    mkdir /usr/local/qcloud/action/login_banner.sh
-    mkdir /usr/local/qcloud/action/action.sh
-}
-
-#卸载v2ray和nginx
-remove_v2ray()
-{
-    systemctl stop v2ray
-    bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh) --remove
-    systemctl disable v2ray
-    rm -rf /usr/bin/v2ray
-    rm -rf /etc/v2ray
-    rm -rf /usr/local/bin/v2ray
-    rm -rf /usr/local/etc/v2ray
-    rm -rf /etc/systemd/system/v2ray.service
-    rm -rf /etc/systemd/system/v2ray@.service
-    systemctl daemon-reload
-}
-remove_nginx()
-{
-    systemctl stop nginx
-    ${nginx_prefix}/sbin/nginx -s stop
-    pkill -9 nginx
-    systemctl disable nginx
-    rm -rf /etc/systemd/system/nginx.service
-    systemctl daemon-reload
-    rm -rf ${nginx_prefix}
-}
-
-#获取内核信息 输出：latest_kernel_version 和 your_kernel_version
-get_kernel_info()
-{
-    green "正在获取最新版本内核版本号。。。。(60内秒未获取成功自动跳过)"
-    local kernel_list
-    local kernel_list_temp=($(timeout 60 wget -qO- https://kernel.ubuntu.com/~kernel-ppa/mainline/ | awk -F'\"v' '/v[0-9]/{print $2}' | cut -d '"' -f1 | cut -d '/' -f1 | sort -rV))
-    if [ ${#kernel_list_temp[@]} -le 1 ]; then
-        latest_kernel_version="error"
-        your_kernel_version=`uname -r | cut -d - -f 1`
-        return 1
-    fi
-    local i=0
-    local i2=0
-    local i3=0
-    local kernel_rc=""
-    local kernel_list_temp2
-    while ((i2<${#kernel_list_temp[@]}))
-    do
-        if [[ "${kernel_list_temp[i2]}" =~ "rc" ]] && [ "$kernel_rc" == "" ]; then
-            kernel_list_temp2[i3]="${kernel_list_temp[i2]}"
-            kernel_rc="${kernel_list_temp[i2]%%-*}"
-            ((i3++))
-            ((i2++))
-        elif [[ "${kernel_list_temp[i2]}" =~ "rc" ]] && [ "${kernel_list_temp[i2]%%-*}" == "$kernel_rc" ]; then
-            kernel_list_temp2[i3]=${kernel_list_temp[i2]}
-            ((i3++))
-            ((i2++))
-        elif [[ "${kernel_list_temp[i2]}" =~ "rc" ]] && [ "${kernel_list_temp[i2]%%-*}" != "$kernel_rc" ]; then
-            for((i3=0;i3<${#kernel_list_temp2[@]};i3++))
-            do
-                kernel_list[i]=${kernel_list_temp2[i3]}
-                ((i++))
-            done
-            kernel_rc=""
-            i3=0
-            unset kernel_list_temp2
-        elif version_ge "$kernel_rc" "${kernel_list_temp[i2]}"; then
-            if [ "$kernel_rc" == "${kernel_list_temp[i2]}" ]; then
-                kernel_list[i]=${kernel_list_temp[i2]}
-                ((i++))
-                ((i2++))
-            fi
-            for((i3=0;i3<${#kernel_list_temp2[@]};i3++))
-            do
-                kernel_list[i]=${kernel_list_temp2[i3]}
-                ((i++))
-            done
-            kernel_rc=""
-            i3=0
-            unset kernel_list_temp2
-        else
-            kernel_list[i]=${kernel_list_temp[i2]}
-            ((i++))
-            ((i2++))
-        fi
-    done
-    if [ "$kernel_rc" != "" ]; then
-        for((i3=0;i3<${#kernel_list_temp2[@]};i3++))
-        do
-            kernel_list[i]=${kernel_list_temp2[i3]}
-            ((i++))
-        done
-    fi
-    latest_kernel_version=${kernel_list[0]}
-    your_kernel_version=`uname -r | cut -d - -f 1`
-    check_fake_version()
-    {
-        local temp=${1##*.}
-        if [ ${temp} -eq 0 ] ; then
-            return 0
-        else
-            return 1
-        fi
-    }
-    while check_fake_version ${your_kernel_version} ;
-    do
-        your_kernel_version=${your_kernel_version%.*}
-    done
-    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
-        local rc_version=`uname -r | cut -d - -f 2`
-        if [[ $rc_version =~ "rc" ]] ; then
-            rc_version=${rc_version##*'rc'}
-            your_kernel_version=${your_kernel_version}-rc${rc_version}
-        fi
-    else
-        latest_kernel_version=${latest_kernel_version%%-*}
-    fi
+    rm -rf "$temp_dir"
+    mkdir "$temp_dir"
+    cd "$temp_dir"
 }
 
 #安装bbr
 install_bbr()
 {
+    #输出：latest_kernel_version 和 your_kernel_version
+    get_kernel_info()
+    {
+        green "正在获取最新版本内核版本号。。。。(60内秒未获取成功自动跳过)"
+        local kernel_list
+        local kernel_list_temp=($(timeout 60 wget -qO- https://kernel.ubuntu.com/~kernel-ppa/mainline/ | awk -F'\"v' '/v[0-9]/{print $2}' | cut -d '"' -f1 | cut -d '/' -f1 | sort -rV))
+        if [ ${#kernel_list_temp[@]} -le 1 ]; then
+            latest_kernel_version="error"
+            your_kernel_version=`uname -r | cut -d - -f 1`
+            return 1
+        fi
+        local i=0
+        local i2=0
+        local i3=0
+        local kernel_rc=""
+        local kernel_list_temp2
+        while ((i2<${#kernel_list_temp[@]}))
+        do
+            if [[ "${kernel_list_temp[i2]}" =~ "rc" ]] && [ "$kernel_rc" == "" ]; then
+                kernel_list_temp2[i3]="${kernel_list_temp[i2]}"
+                kernel_rc="${kernel_list_temp[i2]%%-*}"
+                ((i3++))
+                ((i2++))
+            elif [[ "${kernel_list_temp[i2]}" =~ "rc" ]] && [ "${kernel_list_temp[i2]%%-*}" == "$kernel_rc" ]; then
+                kernel_list_temp2[i3]=${kernel_list_temp[i2]}
+                ((i3++))
+                ((i2++))
+            elif [[ "${kernel_list_temp[i2]}" =~ "rc" ]] && [ "${kernel_list_temp[i2]%%-*}" != "$kernel_rc" ]; then
+                for((i3=0;i3<${#kernel_list_temp2[@]};i3++))
+                do
+                    kernel_list[i]=${kernel_list_temp2[i3]}
+                    ((i++))
+                done
+                kernel_rc=""
+                i3=0
+                unset kernel_list_temp2
+            elif version_ge "$kernel_rc" "${kernel_list_temp[i2]}"; then
+                if [ "$kernel_rc" == "${kernel_list_temp[i2]}" ]; then
+                    kernel_list[i]=${kernel_list_temp[i2]}
+                    ((i++))
+                    ((i2++))
+                fi
+                for((i3=0;i3<${#kernel_list_temp2[@]};i3++))
+                do
+                    kernel_list[i]=${kernel_list_temp2[i3]}
+                    ((i++))
+                done
+                kernel_rc=""
+                i3=0
+                unset kernel_list_temp2
+            else
+                kernel_list[i]=${kernel_list_temp[i2]}
+                ((i++))
+                ((i2++))
+            fi
+        done
+        if [ "$kernel_rc" != "" ]; then
+            for((i3=0;i3<${#kernel_list_temp2[@]};i3++))
+            do
+                kernel_list[i]=${kernel_list_temp2[i3]}
+                ((i++))
+            done
+        fi
+        latest_kernel_version=${kernel_list[0]}
+        your_kernel_version=`uname -r | cut -d - -f 1`
+        check_fake_version()
+        {
+            local temp=${1##*.}
+            if [ ${temp} -eq 0 ] ; then
+                return 0
+            else
+                return 1
+            fi
+        }
+        while check_fake_version ${your_kernel_version} ;
+        do
+            your_kernel_version=${your_kernel_version%.*}
+        done
+        if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
+            local rc_version=`uname -r | cut -d - -f 2`
+            if [[ $rc_version =~ "rc" ]] ; then
+                rc_version=${rc_version##*'rc'}
+                your_kernel_version=${your_kernel_version}-rc${rc_version}
+            fi
+        else
+            latest_kernel_version=${latest_kernel_version%%-*}
+        fi
+    }
+    #卸载多余内核
+    remove_other_kernel()
+    {
+        if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
+            local kernel_list_image=($(dpkg --list | grep 'linux-image' | awk '{print $2}'))
+            local kernel_list_modules=($(dpkg --list | grep 'linux-modules' | awk '{print $2}'))
+            local kernel_now=`uname -r`
+            local ok_install=0
+            for ((i=${#kernel_list_image[@]}-1;i>=0;i--))
+            do
+                if [[ "${kernel_list_image[$i]}" =~ "$kernel_now" ]] ; then     
+                    unset kernel_list_image[$i]
+                    ((ok_install++))
+                fi
+            done
+            if [ $ok_install -lt 1 ] ; then
+                red "未发现正在使用的内核，可能已经被卸载"
+                yellow "按回车键继续。。。"
+                read -s
+                return 1
+            fi
+            ok_install=0
+            for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
+            do
+                if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]] ; then
+                    unset kernel_list_modules[$i]
+                    ((ok_install++))
+                fi
+            done
+            if [ $ok_install -lt 1 ] ; then
+                red "未发现正在使用的内核，可能已经被卸载"
+                yellow "按回车键继续。。。"
+                read -s
+                return 1
+            fi
+            if [ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_image[@]} -eq 0 ]; then
+                yellow "没有内核可卸载"
+                return 0
+            fi
+            apt -y purge ${kernel_list_image[@]} ${kernel_list_modules[@]}
+        else
+            local kernel_list=($(rpm -qa |grep '^kernel-[0-9]\|^kernel-ml-[0-9]'))
+            local kernel_list_devel=($(rpm -qa | grep '^kernel-devel\|^kernel-ml-devel'))
+            if version_ge $redhat_version 8; then
+                local kernel_list_modules=($(rpm -qa |grep '^kernel-modules\|^kernel-ml-modules'))
+                local kernel_list_core=($(rpm -qa | grep '^kernel-core\|^kernel-ml-core'))
+            fi
+            local kernel_now=`uname -r`
+            local ok_install=0
+            for ((i=${#kernel_list[@]}-1;i>=0;i--))
+            do
+                if [[ "${kernel_list[$i]}" =~ "$kernel_now" ]]; then
+                    unset kernel_list[$i]
+                    ((ok_install++))
+                fi
+            done
+            if [ $ok_install -lt 1 ] ; then
+                red "未发现正在使用的内核，可能已经被卸载"
+                yellow "按回车键继续。。。"
+                read -s
+                return 1
+            fi
+            for ((i=${#kernel_list_devel[@]}-1;i>=0;i--))
+            do
+                if [[ "${kernel_list_devel[$i]}" =~ "$kernel_now" ]]; then
+                    unset kernel_list_devel[$i]
+                fi
+            done
+            if version_ge $redhat_version 8; then
+                ok_install=0
+                for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
+                do
+                    if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]]; then
+                        unset kernel_list_modules[$i]
+                        ((ok_install++))
+                    fi
+                done
+                if [ $ok_install -lt 1 ] ; then
+                    red "未发现正在使用的内核，可能已经被卸载"
+                    yellow "按回车键继续。。。"
+                    read -s
+                    return 1
+                fi
+                ok_install=0
+                for ((i=${#kernel_list_core[@]}-1;i>=0;i--))
+                do
+                    if [[ "${kernel_list_core[$i]}" =~ "$kernel_now" ]]; then
+                        unset kernel_list_core[$i]
+                        ((ok_install++))
+                    fi
+                done
+                if [ $ok_install -lt 1 ] ; then
+                    red "未发现正在使用的内核，可能已经被卸载"
+                    yellow "按回车键继续。。。"
+                    read -s
+                    return 1
+                fi
+            fi
+            if ([ ${#kernel_list[@]} -eq 0 ] && [ ${#kernel_list_devel[@]} -eq 0 ]) && (! version_ge $redhat_version 8 || ([ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_core[@]} -eq 0 ])); then
+                yellow "没有内核可卸载"
+                return 0
+            fi
+            if version_ge $redhat_version 8; then
+                $redhat_package_manager -y remove ${kernel_list[@]} ${kernel_list_modules[@]} ${kernel_list_core[@]} ${kernel_list_devel[@]}
+            else
+                $redhat_package_manager -y remove ${kernel_list[@]} ${kernel_list_devel[@]}
+            fi
+        fi
+        green "-------------------卸载完成-------------------"
+    }
+    local your_kernel_version
+    local latest_kernel_version
     if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf ; then
-        echo ' ' >> /etc/sysctl.conf
+        echo >> /etc/sysctl.conf
         echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/sysctl.conf
     fi
     if [ "$latest_kernel_version" == "" ]; then
@@ -1085,7 +653,7 @@ install_bbr()
     tyblue " 当前内核版本：${your_kernel_version}"
     tyblue " 最新内核版本：${latest_kernel_version}"
     tyblue " 当前内核是否支持bbr："
-    if version_ge $your_kernel_version 4.9 ; then
+    if version_ge $your_kernel_version 4.9; then
         green "     是"
     else
         red "     否，需升级内核"
@@ -1215,287 +783,388 @@ install_bbr()
     esac
 }
 
-#卸载多余内核
-remove_other_kernel()
+#读取域名
+readDomain()
 {
-    if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
-        local kernel_list_image=($(dpkg --list | grep 'linux-image' | awk '{print $2}'))
-        local kernel_list_modules=($(dpkg --list | grep 'linux-modules' | awk '{print $2}'))
-        local kernel_now=`uname -r`
-        local ok_install=0
-        for ((i=${#kernel_list_image[@]}-1;i>=0;i--))
-        do
-            if [[ "${kernel_list_image[$i]}" =~ "$kernel_now" ]] ; then     
-                unset kernel_list_image[$i]
-                ((ok_install++))
-            fi
-        done
-        if [ $ok_install -lt 1 ] ; then
-            red "未发现正在使用的内核，可能已经被卸载"
-            yellow "按回车键继续。。。"
-            read -s
-            return 1
-        fi
-        ok_install=0
-        for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
-        do
-            if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]] ; then
-                unset kernel_list_modules[$i]
-                ((ok_install++))
-            fi
-        done
-        if [ $ok_install -lt 1 ] ; then
-            red "未发现正在使用的内核，可能已经被卸载"
-            yellow "按回车键继续。。。"
-            read -s
-            return 1
-        fi
-        if [ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_image[@]} -eq 0 ]; then
-            yellow "没有内核可卸载"
+    check_domain()
+    {
+        local temp=${1%%.*}
+        if [ "$temp" == "www" ]; then
+            red "域名前面不要带www！"
             return 0
-        fi
-        apt -y purge ${kernel_list_image[@]} ${kernel_list_modules[@]}
-    else
-        local kernel_list=($(rpm -qa |grep '^kernel-[0-9]\|^kernel-ml-[0-9]'))
-        local kernel_list_devel=($(rpm -qa | grep '^kernel-devel\|^kernel-ml-devel'))
-        if version_ge $redhat_version 8; then
-            local kernel_list_modules=($(rpm -qa |grep '^kernel-modules\|^kernel-ml-modules'))
-            local kernel_list_core=($(rpm -qa | grep '^kernel-core\|^kernel-ml-core'))
-        fi
-        local kernel_now=`uname -r`
-        local ok_install=0
-        for ((i=${#kernel_list[@]}-1;i>=0;i--))
-        do
-            if [[ "${kernel_list[$i]}" =~ "$kernel_now" ]]; then
-                unset kernel_list[$i]
-                ((ok_install++))
-            fi
-        done
-        if [ $ok_install -lt 1 ] ; then
-            red "未发现正在使用的内核，可能已经被卸载"
-            yellow "按回车键继续。。。"
-            read -s
-            return 1
-        fi
-        for ((i=${#kernel_list_devel[@]}-1;i>=0;i--))
-        do
-            if [[ "${kernel_list_devel[$i]}" =~ "$kernel_now" ]]; then
-                unset kernel_list_devel[$i]
-            fi
-        done
-        if version_ge $redhat_version 8; then
-            ok_install=0
-            for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
-            do
-                if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]]; then
-                    unset kernel_list_modules[$i]
-                    ((ok_install++))
-                fi
-            done
-            if [ $ok_install -lt 1 ] ; then
-                red "未发现正在使用的内核，可能已经被卸载"
-                yellow "按回车键继续。。。"
-                read -s
-                return 1
-            fi
-            ok_install=0
-            for ((i=${#kernel_list_core[@]}-1;i>=0;i--))
-            do
-                if [[ "${kernel_list_core[$i]}" =~ "$kernel_now" ]]; then
-                    unset kernel_list_core[$i]
-                    ((ok_install++))
-                fi
-            done
-            if [ $ok_install -lt 1 ] ; then
-                red "未发现正在使用的内核，可能已经被卸载"
-                yellow "按回车键继续。。。"
-                read -s
-                return 1
-            fi
-        fi
-        if ([ ${#kernel_list[@]} -eq 0 ] && [ ${#kernel_list_devel[@]} -eq 0 ]) && (! version_ge $redhat_version 8 || ([ ${#kernel_list_modules[@]} -eq 0 ] && [ ${#kernel_list_core[@]} -eq 0 ])); then
-            yellow "没有内核可卸载"
+        elif [ "$1" == "" ]; then
             return 0
-        fi
-        if version_ge $redhat_version 8; then
-            $redhat_package_manager -y remove ${kernel_list[@]} ${kernel_list_modules[@]} ${kernel_list_core[@]} ${kernel_list_devel[@]}
         else
-            $redhat_package_manager -y remove ${kernel_list[@]} ${kernel_list_devel[@]}
+            return 1
         fi
-    fi
-    green "-------------------卸载完成-------------------"
+    }
+    local domain=""
+    local domainconfig=""
+    local pretend=""
+    echo -e "\n\n\n"
+    tyblue "--------------------请选择域名解析情况--------------------"
+    tyblue " 1. 一级域名 和 www.一级域名 都解析到此服务器上"
+    green  "    如：123.com 和 www.123.com 都解析到此服务器上"
+    tyblue " 2. 仅某个域名解析到此服务器上"
+    green  "    如：123.com 或 www.123.com 或 xxx.123.com 中的某一个解析到此服务器上"
+    echo
+    while [ "$domainconfig" != "1" -a "$domainconfig" != "2" ]
+    do
+        read -p "您的选择是：" domainconfig
+    done
+    case "$domainconfig" in
+        1)
+            echo
+            tyblue "--------------------请输入一级域名(不带www.，http，:，/)--------------------"
+            read -p "请输入域名：" domain
+            while check_domain $domain ;
+            do
+                read -p "请输入域名：" domain
+            done
+            ;;
+        2)
+            echo
+            tyblue "----------------请输入解析到此服务器的域名(不带http，:，/)----------------"
+            read -p "请输入域名：" domain
+            ;;
+    esac
+    echo -e "\n\n\n"
+    tyblue "------------------------------请选择要伪装的网站页面------------------------------"
+    tyblue " 1. 403页面 (模拟网站后台)"
+    green  "    说明：大型网站几乎都有使用网站后台，比如bilibili的每个视频都是由"
+    green  "    另外一个域名提供的，直接访问那个域名的根目录将返回403或其他错误页面"
+    tyblue " 2. 镜像腾讯视频网站"
+    green  "    说明：是真镜像站，非链接跳转，默认为腾讯视频，搭建完成后可以自己修改，可能构成侵权"
+    tyblue " 3. nextcloud登陆页面"
+    green  "    说明：nextclound是开源的私人网盘服务，假装你搭建了一个私人网盘(可以换成别的自定义网站)"
+    echo
+    while [[ x"$pretend" != x"1" && x"$pretend" != x"2" && x"$pretend" != x"3" ]]
+    do
+        read -p "您的选择是：" pretend
+    done
+    domain_list+=("$domain")
+    domainconfig_list+=("$domainconfig")
+    pretend_list+=("$pretend")
 }
 
-#配置sshd
-setsshd()
+#读取安装模式
+readMode()
 {
+    echo -e "\n\n\n"
+    tyblue "------------------------------请选安装模式------------------------------"
+    tyblue " 1. (V2Ray-TCP+XTLS) + (V2Ray-WebSocket+TLS) + Web"
+    green  "    适合有时使用cdn"
+    tyblue " 2. V2Ray-TCP+XTLS+Web"
+    green  "    适合不使用cdn"
+    tyblue " 3. V2Ray-WebSocket+TLS+Web"
+    green  "    适合一直使用cdn"
     echo
-    tyblue "------------------------------------------"
-    tyblue " 安装可能需要比较长的时间(5-40分钟)"
-    tyblue " 如果和ssh断开连接将会很麻烦"
-    tyblue " 设置ssh连接超时时间将大大降低断连可能性"
-    tyblue "------------------------------------------"
-    choice=""
-    while [ "$choice" != "y" -a "$choice" != "n" ]
+    yellow " 注：XTLS完全兼容TLS"
+    echo
+    mode=""
+    while [[ x"$mode" != x"1" && x"$mode" != x"2" && x"$mode" != x"3" ]]
     do
-        tyblue "是否设置ssh连接超时时间？(y/n)"
-        read choice
+        read -p "您的选择是：" mode
     done
-    if [ $choice == y ]; then
-        echo ' ' >> /etc/ssh/sshd_config
-        echo "ClientAliveInterval 30" >> /etc/ssh/sshd_config
-        echo "ClientAliveCountMax 60" >> /etc/ssh/sshd_config
-        echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/ssh/sshd_config
-        service sshd restart
-        green  "----------------------配置完成----------------------"
-        tyblue " 请重新进行ssh连接(即重新登陆服务器)，并再次运行此脚本"
-        yellow " 按回车键退出。。。。"
-        read -s
+    if [ $mode -eq 3 ]; then
+        yellow "请使用这个脚本安装：https://github.com/kirin10000/V2Ray-WebSocket-TLS-Web-setup-script"
         exit 0
     fi
 }
 
-echo_end()
+#备份域名伪装网站
+backup_domains_web()
 {
-    echo -e "\n\n\n"
-    tyblue "-------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------"
-    tyblue " 服务器类型：VLESS"
-    tyblue " 地址：服务器ip"
-    tyblue " 端口：443"
-    tyblue " 用户ID：${v2id_1}"
-    tyblue " flow：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
-    tyblue " 加密方式：none"
-    tyblue " 传输协议：tcp"
-    tyblue " 伪装类型：none"
-    get_all_domains
-    if [ ${#all_domains[@]} -eq 1 ]; then
-        tyblue " 伪装域名：${all_domains[@]}"
-    else
-        tyblue " 伪装域名：${all_domains[@]} (任选其一)"
-    fi
-    tyblue " 路径：空"
-    tyblue " 底层传输安全：xtls/tls"
-    tyblue " allowInsecure：false"
-    tyblue " Mux：使用XTLS必须关闭;不使用XTLS也建议关闭"
-    tyblue "----------------------------------------------------------"
-    echo
-    yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
-    echo
-    yellow " 目前还没有客户端支持XTLS，请耐心等待各大客户端更新"
-    tyblue " 若想使用XTLS，请自行编写V2Ray客户端配置"
-    echo
-    green  "--------适用于V2RayN/V2RayNG的XTLS自定义配置--------"
-cat <<EOF
-{
-  "log": {
-    "access": "",
-    "error": "",
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": 10808,
-      "listen": "127.0.0.1",
-      "protocol": "socks",
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
-        ]
-      },
-      "settings": {
-        "auth": "noauth",
-        "udp": true
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
-            "address": "服务器ip",
-            "port": 443,
-            "users": [
-              {
-                "id": "${v2id_1}",
-                "flow": "xtls-rprx-origin-udp443",
-                "encryption": "none"
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "xtls",
-        "xtlsSettings": {
-          "allowInsecure": false,
-EOF
-    if [ ${#all_domains[@]} -eq 1 ]; then
-        echo '          "serverName": "'${all_domains[@]}'"'
-    else
-        echo '          "serverName": "'${all_domains[@]}' (任选其一)"'
-    fi
-cat <<EOF
-        }
-      },
-      "mux": {
-        "enabled": false,
-        "concurrency": -1
-      }
-    }
-  ]
-}
-EOF
-    if [ $mode -eq 1 ]; then
-        echo
-        tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
-        tyblue " 服务器类型：VMess"
-        if [ ${#all_domains[@]} -eq 1 ]; then
-            tyblue " 地址：${all_domains[@]}"
-        else
-            tyblue " 地址：${all_domains[@]} (任选其一)"
-        fi
-        tyblue " 端口：443"
-        tyblue " 用户ID：${v2id_2}"
-        tyblue " 额外ID：0"
-        tyblue " 加密方式：使用cdn，推荐auto;不使用cdn，推荐none"
-        tyblue " 传输协议：ws"
-        tyblue " 伪装类型：none"
-        tyblue " 伪装域名：空"
-        tyblue " 路径：${path}"
-        tyblue " 底层传输安全：tls"
-        tyblue " allowInsecure：false"
-        tyblue "----------------------------------------------------------"
-        echo
-        green  " 不使用cdn推荐第一种连接方式"
-        yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
-    fi
-    echo
-    tyblue " 如果要更换被镜像的伪装网站"
-    tyblue " 修改$nginx_config"
-    tyblue " 将v.qq.com修改为你要镜像的网站"
-    echo
-    tyblue " 脚本最后更新时间：2020.09.27"
-    echo
-    red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
-    tyblue " 2020.08"
-}
-
-#获取随机端口号
-get_random_port()
-{
-    port=`shuf -i 1000-65535 -n1`
-    while netstat -at | awk '{print $4}' | tail -n +3 | awk -F : '{print $2}' | grep -q ^$port$ || netstat -at | awk '{print $4}' | tail -n +3 | awk -F : '{print $2}' | grep -q ^$port$
+    local i
+    mkdir "${temp_dir}/domain_backup"
+    for i in ${!domain_list[@]}
     do
-        port=`shuf -i 1000-65535 -n1`
+        if [ "$1" == "cp" ]; then
+            cp -rf ${nginx_prefix}/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
+        else
+            mv ${nginx_prefix}/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
+        fi
     done
 }
 
-#开机自动运行nginx
+#卸载v2ray和nginx
+remove_v2ray()
+{
+    systemctl stop v2ray
+    bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh) --remove
+    systemctl disable v2ray
+    rm -rf /usr/bin/v2ray
+    rm -rf /etc/v2ray
+    rm -rf /usr/local/bin/v2ray
+    rm -rf /usr/local/etc/v2ray
+    rm -rf /etc/systemd/system/v2ray.service
+    rm -rf /etc/systemd/system/v2ray@.service
+    systemctl daemon-reload
+}
+remove_nginx()
+{
+    systemctl stop nginx
+    ${nginx_prefix}/sbin/nginx -s stop
+    pkill -9 nginx
+    systemctl disable nginx
+    rm -rf /etc/systemd/system/nginx.service
+    systemctl daemon-reload
+    rm -rf ${nginx_prefix}
+}
+
+#安装nignx
+install_nginx()
+{
+    green "正在编译和安装nginx。。。。"
+    if ! wget -O ${nginx_version}.tar.gz https://nginx.org/download/${nginx_version}.tar.gz ; then
+        red    "获取nginx失败"
+        yellow "按回车键继续或者按ctrl+c终止"
+        read -s
+    fi
+    tar -zxf ${nginx_version}.tar.gz
+    if ! wget -O ${openssl_version}.tar.gz https://github.com/openssl/openssl/archive/${openssl_version#*-}.tar.gz ; then
+        red    "获取openssl失败"
+        yellow "按回车键继续或者按ctrl+c终止"
+        read -s
+    fi
+    tar -zxf ${openssl_version}.tar.gz
+    cd ${nginx_version}
+    ./configure --prefix=${nginx_prefix} --with-openssl=../$openssl_version --with-openssl-opt="enable-ec_nistp_64_gcc_128 shared threads zlib-dynamic sctp" --with-mail=dynamic --with-mail_ssl_module --with-stream=dynamic --with-stream_ssl_module --with-stream_realip_module --with-stream_geoip_module=dynamic --with-stream_ssl_preread_module --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_geoip_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_auth_request_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-pcre --with-libatomic --with-compat --with-cpp_test_module --with-google_perftools_module --with-file-aio --with-threads --with-poll_module --with-select_module --with-cc-opt="-Wno-error -g0 -O3"
+    if ! make; then
+        red    "nginx编译失败！"
+        yellow "请尝试更换系统，建议使用Ubuntu最新版系统"
+        green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
+        exit 1
+    fi
+    if [ $update == 1 ]; then
+        backup_domains_web
+    fi
+    remove_nginx
+    make install
+    cd ..
+}
+
+#安装/更新V2Ray
+install_update_v2ray()
+{
+    green "正在安装/更新V2Ray。。。。"
+    if ! bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh) && ! bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh); then
+        red    "安装/更新V2Ray失败"
+        yellow "按回车键继续或者按ctrl+c终止"
+        read -s
+        return 1
+    fi
+    return 0
+}
+
+#获取证书 参数: domain domainconfig
+get_cert()
+{
+    mv $v2ray_config $v2ray_config.bak
+    echo "{}" >> $v2ray_config
+    if [ $2 -eq 1 ]; then
+        local temp="-d www.$1"
+    else
+        local temp=""
+    fi
+    if ! $HOME/.acme.sh/acme.sh --issue -d $1 $temp -w ${nginx_prefix}/html -k ec-256 -ak ec-256 --pre-hook "mv ${nginx_prefix}/conf/nginx.conf ${nginx_prefix}/conf/nginx.conf.bak && cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --post-hook "mv ${nginx_prefix}/conf/nginx.conf.bak ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --ocsp; then
+        $HOME/.acme.sh/acme.sh --issue -d $1 $temp -w ${nginx_prefix}/html -k ec-256 -ak ec-256 --pre-hook "mv ${nginx_prefix}/conf/nginx.conf ${nginx_prefix}/conf/nginx.conf.bak && cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --post-hook "mv ${nginx_prefix}/conf/nginx.conf.bak ${nginx_prefix}/conf/nginx.conf && sleep 2s && systemctl restart nginx" --ocsp --debug
+    fi
+    if id nobody | grep -qw 'nogroup'; then
+        temp="chown -R nobody:nogroup ${nginx_prefix}/certs"
+    else
+        temp="chown -R nobody:nobody ${nginx_prefix}/certs"
+    fi
+    if ! $HOME/.acme.sh/acme.sh --installcert -d $1 --key-file ${nginx_prefix}/certs/${1}.key --fullchain-file ${nginx_prefix}/certs/${1}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
+        yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
+        yellow "按回车键继续。。。"
+        read -s
+    fi
+    mv $v2ray_config.bak $v2ray_config
+}
+get_all_certs()
+{
+    local i
+    for ((i=0;i<${#domain_list[@]};i++))
+    do
+        get_cert ${domain_list[i]} ${domainconfig_list[i]}
+    done
+}
+
+#配置nginx
+config_nginx_init()
+{
+cat > ${nginx_prefix}/conf/nginx.conf <<EOF
+
+user  root root;
+worker_processes  auto;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+google_perftools_profiles ${nginx_prefix}/tcmalloc_temp/tcmalloc;
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    #log_format  main  '\$remote_addr - \$remote_user [\$time_local] "\$request" '
+    #                  '\$status \$body_bytes_sent "\$http_referer" '
+    #                  '"\$http_user_agent" "\$http_x_forwarded_for"';
+
+    #access_log  logs/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include       $nginx_config;
+    #server {
+        #listen       80;
+        #server_name  localhost;
+
+        #charset koi8-r;
+
+        #access_log  logs/host.access.log  main;
+
+        #location / {
+        #    root   html;
+        #    index  index.html index.htm;
+        #}
+
+        #error_page  404              /404.html;
+
+        # redirect server error pages to the static page /50x.html
+        #
+        #error_page   500 502 503 504  /50x.html;
+        #location = /50x.html {
+        #    root   html;
+        #}
+
+        # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+        #
+        #location ~ \\.php\$ {
+        #    proxy_pass   http://127.0.0.1;
+        #}
+
+        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+        #
+        #location ~ \\.php\$ {
+        #    root           html;
+        #    fastcgi_pass   127.0.0.1:9000;
+        #    fastcgi_index  index.php;
+        #    fastcgi_param  SCRIPT_FILENAME  /scripts\$fastcgi_script_name;
+        #    include        fastcgi_params;
+        #}
+
+        # deny access to .htaccess files, if Apache's document root
+        # concurs with nginx's one
+        #
+        #location ~ /\\.ht {
+        #    deny  all;
+        #}
+    #}
+
+
+    # another virtual host using mix of IP-, name-, and port-based configuration
+    #
+    #server {
+    #    listen       8000;
+    #    listen       somename:8080;
+    #    server_name  somename  alias  another.alias;
+
+    #    location / {
+    #        root   html;
+    #        index  index.html index.htm;
+    #    }
+    #}
+
+
+    # HTTPS server
+    #
+    #server {
+    #    listen       443 ssl;
+    #    server_name  localhost;
+
+    #    ssl_certificate      cert.pem;
+    #    ssl_certificate_key  cert.key;
+
+    #    ssl_session_cache    shared:SSL:1m;
+    #    ssl_session_timeout  5m;
+
+    #    ssl_ciphers  HIGH:!aNULL:!MD5;
+    #    ssl_prefer_server_ciphers  on;
+
+    #    location / {
+    #        root   html;
+    #        index  index.html index.htm;
+    #    }
+    #}
+
+}
+EOF
+}
+config_nginx()
+{
+    config_nginx_init
+    local i
+    get_all_domains
+cat > $nginx_config<<EOF
+server {
+    listen 80 fastopen=100 reuseport default_server;
+    listen [::]:80 fastopen=100 reuseport default_server;
+    return 301 https://${all_domains[0]};
+}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${all_domains[@]};
+    return 301 https://\$host\$request_uri;
+}
+server {
+    listen unix:${nginx_prefix}/unixsocks_temp/default.sock default_server;
+    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2 default_server;
+    return 301 https://${all_domains[0]};
+}
+EOF
+    for ((i=0;i<${#domain_list[@]};i++))
+    do
+cat >> $nginx_config<<EOF
+server {
+    listen unix:${nginx_prefix}/unixsocks_temp/default.sock;
+    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2;
+EOF
+        if [ ${domainconfig_list[i]} -eq 1 ]; then
+            echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
+        else
+            echo "    server_name ${domain_list[i]};" >> $nginx_config
+        fi
+        if [ ${pretend_list[i]} -eq 1 ]; then
+            echo "    return 403;" >> $nginx_config
+        elif [ ${pretend_list[i]} -eq 2 ]; then
+cat >> $nginx_config<<EOF
+    location / {
+        proxy_pass https://v.qq.com;
+        proxy_set_header referer "https://v.qq.com";
+    }
+EOF
+        elif [ ${pretend_list[i]} -eq 3 ]; then
+            echo "    root ${nginx_prefix}/html/${domain_list[i]};" >> $nginx_config
+        fi
+        echo "}" >> $nginx_config
+    done
+}
 config_service_nginx()
 {
     systemctl disable nginx
@@ -1670,6 +1339,377 @@ get_all_webs()
     do
         get_web ${domain_list[i]} ${pretend_list[i]}
     done
+}
+
+echo_end()
+{
+    echo -e "\n\n\n"
+    tyblue "-------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------"
+    tyblue " 服务器类型：VLESS"
+    tyblue " 地址：服务器ip"
+    tyblue " 端口：443"
+    tyblue " 用户ID：${v2id_1}"
+    tyblue " flow：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
+    tyblue " 加密方式：none"
+    tyblue " 传输协议：tcp"
+    tyblue " 伪装类型：none"
+    get_all_domains
+    if [ ${#all_domains[@]} -eq 1 ]; then
+        tyblue " 伪装域名：${all_domains[@]}"
+    else
+        tyblue " 伪装域名：${all_domains[@]} (任选其一)"
+    fi
+    tyblue " 路径：空"
+    tyblue " 底层传输安全：xtls/tls"
+    tyblue " allowInsecure：false"
+    tyblue " Mux：使用XTLS必须关闭;不使用XTLS也建议关闭"
+    tyblue "----------------------------------------------------------"
+    echo
+    yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
+    echo
+    yellow " 目前还没有客户端支持XTLS，请耐心等待各大客户端更新"
+    tyblue " 若想使用XTLS，请自行编写V2Ray客户端配置"
+    echo
+    green  "--------适用于V2RayN/V2RayNG的XTLS自定义配置--------"
+cat <<EOF
+{
+  "log": {
+    "access": "",
+    "error": "",
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "port": 10808,
+      "listen": "127.0.0.1",
+      "protocol": "socks",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      },
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "服务器ip",
+            "port": 443,
+            "users": [
+              {
+                "id": "${v2id_1}",
+                "flow": "xtls-rprx-origin-udp443",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "xtls",
+        "xtlsSettings": {
+          "allowInsecure": false,
+EOF
+    if [ ${#all_domains[@]} -eq 1 ]; then
+        echo '          "serverName": "'${all_domains[@]}'"'
+    else
+        echo '          "serverName": "'${all_domains[@]}' (任选其一)"'
+    fi
+cat <<EOF
+        }
+      },
+      "mux": {
+        "enabled": false,
+        "concurrency": -1
+      }
+    }
+  ]
+}
+EOF
+    if [ $mode -eq 1 ]; then
+        echo
+        tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
+        tyblue " 服务器类型：VMess"
+        if [ ${#all_domains[@]} -eq 1 ]; then
+            tyblue " 地址：${all_domains[@]}"
+        else
+            tyblue " 地址：${all_domains[@]} (任选其一)"
+        fi
+        tyblue " 端口：443"
+        tyblue " 用户ID：${v2id_2}"
+        tyblue " 额外ID：0"
+        tyblue " 加密方式：使用cdn，推荐auto;不使用cdn，推荐none"
+        tyblue " 传输协议：ws"
+        tyblue " 伪装类型：none"
+        tyblue " 伪装域名：空"
+        tyblue " 路径：${path}"
+        tyblue " 底层传输安全：tls"
+        tyblue " allowInsecure：false"
+        tyblue "----------------------------------------------------------"
+        echo
+        green  " 不使用cdn推荐第一种连接方式"
+        yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
+    fi
+    echo
+    tyblue " 如果要更换被镜像的伪装网站"
+    tyblue " 修改$nginx_config"
+    tyblue " 将v.qq.com修改为你要镜像的网站"
+    echo
+    tyblue " 脚本最后更新时间：2020.09.27"
+    echo
+    red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
+    tyblue " 2020.08"
+}
+
+#获取配置信息 path port v2id_1 v2id_2 mode
+get_base_information()
+{
+    v2id_1=`grep id $v2ray_config | head -n 1`
+    v2id_1=${v2id_1##*' '}
+    v2id_1=${v2id_1#*'"'}
+    v2id_1=${v2id_1%'"'*}
+    if [ $(grep -E "vmess|vless" $v2ray_config | wc -l) -eq 2 ]; then
+        mode=1
+        port=`grep port $v2ray_config | tail -n 1`
+        port=${port##*' '}
+        port=${port%%,*}
+        path=`grep path $v2ray_config`
+        path=${path##*' '}
+        path=${path#*'"'}
+        path=${path%'"'*}
+        v2id_2=`grep id $v2ray_config | tail -n 1`
+        v2id_2=${v2id_2##*' '}
+        v2id_2=${v2id_2#*'"'}
+        v2id_2=${v2id_2%'"'*}
+    else
+        mode=2
+        port=""
+        path=""
+        v2id_2=""
+    fi
+}
+
+#获取域名列表
+get_domainlist()
+{
+    unset domain_list
+    domain_list=($(grep server_name $nginx_config | sed 's/;//g' | awk 'NR>1 {print $NF}'))
+    local line
+    local i
+    for i in ${!domain_list[@]}
+    do
+        line=`grep -n "server_name www.${domain_list[i]} ${domain_list[i]};" $nginx_config | tail -n 1 | awk -F : '{print $1}'`
+        if [ "$line" == "" ]; then
+            line=`grep -n "server_name ${domain_list[i]};" $nginx_config | tail -n 1 | awk -F : '{print $1}'`
+            domainconfig_list[i]=2
+        else
+            domainconfig_list[i]=1
+        fi
+        if awk 'NR=='"$(($line+1))"' {print $0}' $nginx_config | grep -q "return 403"; then
+            pretend_list[i]=1
+        elif awk 'NR=='"$(($line+1))"' {print $0}' $nginx_config | grep -q "location / {"; then
+            pretend_list[i]=2
+        else
+            pretend_list[i]=3
+        fi
+    done
+}
+
+#安装v2ray_tls_web
+install_update_v2ray_tls_web()
+{
+    install_dependence()
+    {
+        if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
+            if ! apt -y --no-install-recommends install $1; then
+                apt update
+                if ! apt -y --no-install-recommends install $1; then
+                    yellow "依赖安装失败！！"
+                    green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
+                    yellow "按回车键继续或者ctrl+c退出"
+                    read -s
+                fi
+            fi
+        else
+            if [ $release == "centos" ] && version_ge $systemVersion 8; then
+                if $redhat_package_manager --help | grep -q "\-\-enablerepo="; then
+                    local redhat_install_command="$redhat_package_manager -y --enablerepo=PowerTools install"
+                else
+                    local redhat_install_command="$redhat_package_manager -y --enablerepo PowerTools install"
+                fi
+            else
+                local redhat_install_command="$redhat_package_manager -y install"
+            fi
+            if ! $redhat_install_command $1; then
+                yellow "依赖安装失败！！"
+                green  "欢迎进行Bug report(https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/issues)，感谢您的支持"
+                yellow "按回车键继续或者ctrl+c退出"
+                read -s
+            fi
+        fi
+    }
+    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/ssh/sshd_config; then
+        setsshd
+    fi
+    apt -y -f install
+    systemctl stop nginx
+    systemctl stop v2ray
+    uninstall_firewall
+    doupdate
+    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf ; then
+        echo >> /etc/sysctl.conf
+        echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/sysctl.conf
+    fi
+    if ! grep -q "net.ipv4.tcp_fastopen = 3" /etc/sysctl.conf || ! sysctl net.ipv4.tcp_fastopen | grep -wq 3; then
+        sed -i '/net.ipv4.tcp_fastopen/d' /etc/sysctl.conf
+        echo 'net.ipv4.tcp_fastopen = 3' >> /etc/sysctl.conf
+        sysctl -p
+    fi
+    enter_temp_dir
+    install_bbr
+    apt -y -f install
+
+#读取信息
+    if [ $update == 0 ]; then
+        readDomain
+        readMode
+    else
+        get_base_information
+        get_domainlist
+    fi
+
+    green "正在安装依赖。。。。"
+    if [ $release == "centos" ] || [ $release == "fedora" ] || [ $release == "other-redhat" ]; then
+        install_dependence "gperftools-devel libatomic_ops-devel pcre-devel zlib-devel libxslt-devel gd-devel perl-ExtUtils-Embed perl-Data-Dumper perl-IPC-Cmd geoip-devel lksctp-tools-devel libxml2-devel gcc gcc-c++ wget unzip curl make openssl crontabs"
+        ##libxml2-devel非必须
+    else
+        if [ "$release" == "ubuntu" ] && [ "$systemVersion" == "20.04" ]; then
+            install_dependence "gcc-10 g++-10"
+            apt -y purge gcc g++ gcc-9 g++-9 gcc-8 g++-8 gcc-7 g++-7
+            apt -y autopurge
+            install_dependence "gcc-10 g++-10 libgoogle-perftools-dev libatomic-ops-dev libperl-dev libxslt-dev zlib1g-dev libpcre3-dev libgeoip-dev libgd-dev libxml2-dev libsctp-dev wget unzip curl make openssl cron"
+            ln -s -f /usr/bin/gcc-10                         /usr/bin/gcc
+            ln -s -f /usr/bin/gcc-10                         /usr/bin/cc
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-10        /usr/bin/x86_64-linux-gnu-gcc
+            ln -s -f /usr/bin/g++-10                         /usr/bin/g++
+            ln -s -f /usr/bin/g++-10                         /usr/bin/c++
+            ln -s -f /usr/bin/x86_64-linux-gnu-g++-10        /usr/bin/x86_64-linux-gnu-g++
+            ln -s -f /usr/bin/gcc-ar-10                      /usr/bin/gcc-ar
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-ar-10     /usr/bin/x86_64-linux-gnu-gcc-ar
+            ln -s -f /usr/bin/gcc-nm-10                      /usr/bin/gcc-nm
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-nm-10     /usr/bin/x86_64-linux-gnu-gcc-nm
+            ln -s -f /usr/bin/gcc-ranlib-10                  /usr/bin/gcc-ranlib
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcc-ranlib-10 /usr/bin/x86_64-linux-gnu-gcc-ranlib
+            ln -s -f /usr/bin/cpp-10                         /usr/bin/cpp
+            ln -s -f /usr/bin/x86_64-linux-gnu-cpp-10        /usr/bin/x86_64-linux-gnu-cpp
+            ln -s -f /usr/bin/gcov-10                        /usr/bin/gcov
+            ln -s -f /usr/bin/gcov-dump-10                   /usr/bin/gcov-dump
+            ln -s -f /usr/bin/gcov-tool-10                   /usr/bin/gcov-tool
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcov-10       /usr/bin/x86_64-linux-gnu-gcov
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcov-dump-10  /usr/bin/x86_64-linux-gnu-gcov-dump
+            ln -s -f /usr/bin/x86_64-linux-gnu-gcov-tool-10  /usr/bin/x86_64-linux-gnu-gcov-tool
+        else
+            install_dependence "gcc g++ libgoogle-perftools-dev libatomic-ops-dev libperl-dev libxslt-dev zlib1g-dev libpcre3-dev libgeoip-dev libgd-dev libxml2-dev libsctp-dev wget unzip curl make openssl cron"
+            ##libxml2-dev非必须
+        fi
+    fi
+    apt clean
+    $redhat_package_manager clean all
+
+##安装nginx
+    if [ $nginx_is_installed -eq 0 ] || [ $update -eq 1 ]; then
+        install_nginx
+    else
+        tyblue "---------------检测到nginx已存在---------------"
+        tyblue " 1. 尝试使用现有nginx"
+        tyblue " 2. 卸载现有nginx并重新编译安装"
+        echo
+        yellow " 若安装完成后nginx无法启动，请卸载并重新安装"
+        green  " 若想更新nginx，请选择2"
+        echo
+        choice=""
+        while [ "$choice" != "1" ] && [ "$choice" != "2" ]
+        do
+            read -p "您的选择是：" choice
+        done
+        if [ $choice -eq 2 ]; then
+            install_nginx
+        fi
+    fi
+    mkdir ${nginx_prefix}/conf.d
+    mkdir ${nginx_prefix}/certs
+    config_service_nginx
+
+#安装V2Ray
+    remove_v2ray
+    install_update_v2ray
+    systemctl enable v2ray
+
+    green "正在获取证书。。。。"
+    curl https://get.acme.sh | sh
+    $HOME/.acme.sh/acme.sh --upgrade --auto-upgrade
+    get_all_certs
+
+    if [ $update == 0 ]; then
+        path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
+        path="/$path"
+        v2id_1=`cat /proc/sys/kernel/random/uuid`
+        v2id_2=`cat /proc/sys/kernel/random/uuid`
+        get_random_port
+    fi
+    config_v2ray
+    config_nginx
+    if [ $update == 1 ]; then
+        mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
+    else
+        get_all_webs
+    fi
+    sleep 2s
+    systemctl restart nginx
+    systemctl restart v2ray
+    if [ $update == 1 ]; then
+        green "-------------------升级完成-------------------"
+    else
+        green "-------------------安装完成-------------------"
+    fi
+    echo_end
+    rm -rf "$temp_dir"
+}
+
+#修改dns
+change_dns()
+{
+    red    "注意！！"
+    red    "1.部分云服务商(如阿里云)使用本地服务器作为软件包源，修改dns后需要换源！！"
+    red    "  如果听不懂，那么请在安装完v2ray+ws+tls后再修改dns，并且修改完后不要重新安装"
+    red    "2.Ubuntu系统重启后可能会恢复原dns"
+    tyblue "此操作将修改dns服务器为1.1.1.1和1.0.0.1(cloudflare公共dns)"
+    choice=""
+    while [ "$choice" != "y" -a "$choice" != "n" ]
+    do
+        tyblue "是否要继续?(y/n)"
+        read choice
+    done
+    if [ $choice == y ]; then
+        if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/resolv.conf ; then
+            sed -i 's/nameserver /#&/' /etc/resolv.conf
+            echo >> /etc/resolv.conf
+            echo 'nameserver 1.1.1.1' >> /etc/resolv.conf
+            echo 'nameserver 1.0.0.1' >> /etc/resolv.conf
+            echo '#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script' >> /etc/resolv.conf
+        fi
+        green "修改完成！！"
+    fi
 }
 
 #开始菜单
@@ -2007,55 +2047,6 @@ start_menu()
     elif [ $choice -eq 16 ]; then
         change_dns
     fi
-}
-
-#修改dns
-change_dns()
-{
-    red    "注意！！"
-    red    "1.部分云服务商(如阿里云)使用本地服务器作为软件包源，修改dns后需要换源！！"
-    red    "  如果听不懂，那么请在安装完v2ray+ws+tls后再修改dns，并且修改完后不要重新安装"
-    red    "2.Ubuntu系统重启后可能会恢复原dns"
-    tyblue "此操作将修改dns服务器为1.1.1.1和1.0.0.1(cloudflare公共dns)"
-    choice=""
-    while [ "$choice" != "y" -a "$choice" != "n" ]
-    do
-        tyblue "是否要继续?(y/n)"
-        read choice
-    done
-    if [ $choice == y ]; then
-        if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/resolv.conf ; then
-            sed -i 's/nameserver /#&/' /etc/resolv.conf
-            echo ' ' >> /etc/resolv.conf
-            echo 'nameserver 1.1.1.1' >> /etc/resolv.conf
-            echo 'nameserver 1.0.0.1' >> /etc/resolv.conf
-            echo '#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script' >> /etc/resolv.conf
-        fi
-        green "修改完成！！"
-    fi
-}
-
-#进入工作目录
-enter_temp_dir()
-{
-    rm -rf "$temp_dir"
-    mkdir "$temp_dir"
-    cd "$temp_dir"
-}
-
-#备份域名伪装网站
-backup_domains_web()
-{
-    local i
-    mkdir "${temp_dir}/domain_backup"
-    for i in ${!domain_list[@]}
-    do
-        if [ "$1" == "cp" ]; then
-            cp -rf ${nginx_prefix}/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
-        else
-            mv ${nginx_prefix}/html/${domain_list[i]} "${temp_dir}/domain_backup" 2>/dev/null
-        fi
-    done
 }
 
 check_is_installed
