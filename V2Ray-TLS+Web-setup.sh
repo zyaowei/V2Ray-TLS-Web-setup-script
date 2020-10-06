@@ -1387,75 +1387,9 @@ echo_end()
     echo
     yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
     echo
-    yellow " 目前还没有客户端支持XTLS，请耐心等待各大客户端更新"
-    tyblue " 若想使用XTLS，请自行编写V2Ray客户端配置"
-    echo
-    green  "--------适用于V2RayN/V2RayNG的XTLS自定义配置--------"
-cat <<EOF
-{
-  "log": {
-    "access": "",
-    "error": "",
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": 10808,
-      "listen": "127.0.0.1",
-      "protocol": "socks",
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
-        ]
-      },
-      "settings": {
-        "auth": "noauth",
-        "udp": true
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
-            "address": "服务器ip",
-            "port": 443,
-            "users": [
-              {
-                "id": "${v2id_1}",
-                "flow": "xtls-rprx-origin-udp443",
-                "encryption": "none"
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "xtls",
-        "xtlsSettings": {
-          "allowInsecure": false,
-EOF
-    if [ ${#all_domains[@]} -eq 1 ]; then
-        echo '          "serverName": "'${all_domains[@]}'"'
-    else
-        echo '          "serverName": "'${all_domains[@]}' (任选其一)"'
-    fi
-cat <<EOF
-        }
-      },
-      "mux": {
-        "enabled": false,
-        "concurrency": -1
-      }
-    }
-  ]
-}
-EOF
+    tyblue " 目前支持支持XTLS的图形化客户端："
+    tyblue "   Windows：V2RayN  v3.24+"
+    tyblue "   Android：V2RayNG v1.4.6+"
     if [ $mode -eq 1 ]; then
         echo
         tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
