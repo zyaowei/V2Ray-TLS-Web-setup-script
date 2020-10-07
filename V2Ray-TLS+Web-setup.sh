@@ -302,7 +302,7 @@ doupdate()
 {
     updateSystem()
     {
-        if ! command -v /usr/bin/do-release-upgrade > /dev/null 2>&1; then
+        if ! [[ "$(type -P do-release-upgrade)" ]]; then
             if ! apt -y --no-install-recommends install ubuntu-release-upgrader-core; then
                 apt update
                 if ! apt -y --no-install-recommends install ubuntu-release-upgrader-core; then
@@ -411,7 +411,7 @@ doupdate()
             read -p "您的选择是：" choice
         done
     fi
-    if [[ "$release" == "ubuntu" && "$choice" == "1" ]] ; then
+    if [[ "$release" == "ubuntu" && "$choice" == "1" ]]; then
         apt -y --purge autoremove
         updateSystem
         apt -y --purge autoremove
@@ -510,19 +510,19 @@ install_bbr()
         check_fake_version()
         {
             local temp=${1##*.}
-            if [ ${temp} -eq 0 ] ; then
+            if [ ${temp} -eq 0 ]; then
                 return 0
             else
                 return 1
             fi
         }
-        while check_fake_version ${your_kernel_version} ;
+        while check_fake_version ${your_kernel_version}
         do
             your_kernel_version=${your_kernel_version%.*}
         done
         if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
             local rc_version=`uname -r | cut -d - -f 2`
-            if [[ $rc_version =~ "rc" ]] ; then
+            if [[ $rc_version =~ "rc" ]]; then
                 rc_version=${rc_version##*'rc'}
                 your_kernel_version=${your_kernel_version}-rc${rc_version}
             fi
@@ -540,12 +540,12 @@ install_bbr()
             local ok_install=0
             for ((i=${#kernel_list_image[@]}-1;i>=0;i--))
             do
-                if [[ "${kernel_list_image[$i]}" =~ "$kernel_now" ]] ; then     
+                if [[ "${kernel_list_image[$i]}" =~ "$kernel_now" ]]; then     
                     unset kernel_list_image[$i]
                     ((ok_install++))
                 fi
             done
-            if [ $ok_install -lt 1 ] ; then
+            if [ $ok_install -lt 1 ]; then
                 red "未发现正在使用的内核，可能已经被卸载"
                 yellow "按回车键继续。。。"
                 read -s
@@ -554,12 +554,12 @@ install_bbr()
             ok_install=0
             for ((i=${#kernel_list_modules[@]}-1;i>=0;i--))
             do
-                if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]] ; then
+                if [[ "${kernel_list_modules[$i]}" =~ "$kernel_now" ]]; then
                     unset kernel_list_modules[$i]
                     ((ok_install++))
                 fi
             done
-            if [ $ok_install -lt 1 ] ; then
+            if [ $ok_install -lt 1 ]; then
                 red "未发现正在使用的内核，可能已经被卸载"
                 yellow "按回车键继续。。。"
                 read -s
@@ -586,7 +586,7 @@ install_bbr()
                     ((ok_install++))
                 fi
             done
-            if [ $ok_install -lt 1 ] ; then
+            if [ $ok_install -lt 1 ]; then
                 red "未发现正在使用的内核，可能已经被卸载"
                 yellow "按回车键继续。。。"
                 read -s
@@ -607,7 +607,7 @@ install_bbr()
                         ((ok_install++))
                     fi
                 done
-                if [ $ok_install -lt 1 ] ; then
+                if [ $ok_install -lt 1 ]; then
                     red "未发现正在使用的内核，可能已经被卸载"
                     yellow "按回车键继续。。。"
                     read -s
@@ -621,7 +621,7 @@ install_bbr()
                         ((ok_install++))
                     fi
                 done
-                if [ $ok_install -lt 1 ] ; then
+                if [ $ok_install -lt 1 ]; then
                     red "未发现正在使用的内核，可能已经被卸载"
                     yellow "按回车键继续。。。"
                     read -s
@@ -642,7 +642,7 @@ install_bbr()
     }
     local your_kernel_version
     local latest_kernel_version
-    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf ; then
+    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf; then
         echo >> /etc/sysctl.conf
         echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/sysctl.conf
     fi
@@ -654,7 +654,7 @@ install_bbr()
     echo -e "\n\n\n"
     tyblue "------------------请选择要使用的bbr版本------------------"
     green  " 1. 升级最新版内核并启用bbr(推荐)"
-    if version_ge $your_kernel_version 4.9 ; then
+    if version_ge $your_kernel_version 4.9; then
         tyblue " 2. 启用bbr"
     else
         tyblue " 2. 升级内核启用bbr"
@@ -723,7 +723,7 @@ install_bbr()
             fi
             chmod +x update-kernel.sh
             ./update-kernel.sh
-            if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr" ; then
+            if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
                 red "开启bbr失败"
                 red "如果刚安装完内核，请先重启"
                 red "如果重启仍然无效，请尝试选择2选项"
@@ -739,9 +739,9 @@ install_bbr()
             echo 'net.ipv4.tcp_congestion_control = bbr' >> /etc/sysctl.conf
             sysctl -p
             sleep 1s
-            if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr" ; then
+            if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
                 rm -rf bbr.sh
-                if ! wget -O bbr.sh https://github.com/teddysun/across/raw/master/bbr.sh ; then
+                if ! wget -O bbr.sh https://github.com/teddysun/across/raw/master/bbr.sh; then
                     red    "获取bbr脚本失败"
                     yellow "按回车键继续或者按ctrl+c终止"
                     read -s
@@ -760,13 +760,13 @@ install_bbr()
             read -s
             rm -rf bbr2.sh
             if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
-                if ! wget -O bbr2.sh https://github.com/yeyingorg/bbr2.sh/raw/master/bbr2.sh ; then
+                if ! wget -O bbr2.sh https://github.com/yeyingorg/bbr2.sh/raw/master/bbr2.sh; then
                     red    "获取bbr2脚本失败"
                     yellow "按回车键继续或者按ctrl+c终止"
                     read -s
                 fi
             else
-                if ! wget -O bbr2.sh https://github.com/jackjieYYY/bbr2/raw/master/bbr2.sh ; then
+                if ! wget -O bbr2.sh https://github.com/jackjieYYY/bbr2/raw/master/bbr2.sh; then
                     red    "获取bbr2脚本失败"
                     yellow "按回车键继续或者按ctrl+c终止"
                     read -s
@@ -778,7 +778,7 @@ install_bbr()
             ;;
         4)
             rm -rf tcp.sh
-            if ! wget -O tcp.sh "https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh" ; then
+            if ! wget -O tcp.sh "https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh"; then
                 red    "获取脚本失败"
                 yellow "按回车键继续或者按ctrl+c终止"
                 read -s
@@ -837,7 +837,7 @@ readDomain()
             echo
             tyblue "--------------------请输入一级域名(不带www.，http，:，/)--------------------"
             read -p "请输入域名：" domain
-            while check_domain $domain ;
+            while check_domain $domain
             do
                 read -p "请输入域名：" domain
             done
@@ -936,13 +936,13 @@ remove_nginx()
 install_nginx()
 {
     green "正在编译和安装nginx。。。。"
-    if ! wget -O ${nginx_version}.tar.gz https://nginx.org/download/${nginx_version}.tar.gz ; then
+    if ! wget -O ${nginx_version}.tar.gz https://nginx.org/download/${nginx_version}.tar.gz; then
         red    "获取nginx失败"
         yellow "按回车键继续或者按ctrl+c终止"
         read -s
     fi
     tar -zxf ${nginx_version}.tar.gz
-    if ! wget -O ${openssl_version}.tar.gz https://github.com/openssl/openssl/archive/${openssl_version#*-}.tar.gz ; then
+    if ! wget -O ${openssl_version}.tar.gz https://github.com/openssl/openssl/archive/${openssl_version#*-}.tar.gz; then
         red    "获取openssl失败"
         yellow "按回车键继续或者按ctrl+c终止"
         read -s
@@ -1365,50 +1365,50 @@ echo_end()
 {
     echo -e "\n\n\n"
     tyblue "-------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------"
-    tyblue " 服务器类型：VLESS"
-    tyblue " 地址：服务器ip"
-    tyblue " 端口：443"
-    tyblue " 用户ID：${v2id_1}"
-    tyblue " flow：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
-    tyblue " 加密方式：none"
-    tyblue " 传输协议：tcp"
-    tyblue " 伪装类型：none"
+    tyblue " 服务器类型            ：VLESS"
+    tyblue " 地址(address)         ：服务器ip"
+    tyblue " 端口(port)            ：443"
+    tyblue " 用户ID(id)            ：${v2id_1}"
+    tyblue " 流控(flow)            ：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
+    tyblue " 加密(encryption)      ：none"
+    tyblue " 传输协议(network)     ：tcp"
+    tyblue " 伪装类型(type)        ：none"
     get_all_domains
     if [ ${#all_domains[@]} -eq 1 ]; then
-        tyblue " 伪装域名：${all_domains[@]}"
+        tyblue " 伪装域名(serverName)  ：${all_domains[@]}"
     else
-        tyblue " 伪装域名：${all_domains[@]} (任选其一)"
+        tyblue " 伪装域名(serverName)  ：${all_domains[@]} (任选其一)"
     fi
-    tyblue " 路径：空"
-    tyblue " 底层传输安全：xtls/tls"
-    tyblue " allowInsecure：false"
-    tyblue " Mux：使用XTLS必须关闭;不使用XTLS也建议关闭"
+    tyblue " 路径(path)            ：空"
+    tyblue " 底层传输安全(security)：xtls/tls"
+    tyblue " allowInsecure         ：false"
+    tyblue " Mux(mux)              ：使用XTLS必须关闭;不使用XTLS也建议关闭"
     tyblue "----------------------------------------------------------"
     echo
     yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
     echo
-    tyblue " 目前支持支持XTLS的图形化客户端："
-    tyblue "   Windows：V2RayN  v3.24+"
-    tyblue "   Android：V2RayNG v1.4.6+"
+    green  " 目前支持支持XTLS的图形化客户端："
+    green  "   Windows：V2RayN  v3.24+"
+    green  "   Android：V2RayNG v1.4.6+"
     if [ $mode -eq 1 ]; then
         echo
         tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
-        tyblue " 服务器类型：VMess"
+        tyblue " 服务器类型            ：VMess"
         if [ ${#all_domains[@]} -eq 1 ]; then
-            tyblue " 地址：${all_domains[@]}"
+            tyblue " 地址(address)         ：${all_domains[@]}"
         else
-            tyblue " 地址：${all_domains[@]} (任选其一)"
+            tyblue " 地址(address)         ：${all_domains[@]} (任选其一)"
         fi
-        tyblue " 端口：443"
-        tyblue " 用户ID：${v2id_2}"
-        tyblue " 额外ID：0"
-        tyblue " 加密方式：使用cdn，推荐auto;不使用cdn，推荐none"
-        tyblue " 传输协议：ws"
-        tyblue " 伪装类型：none"
-        tyblue " 伪装域名：空"
-        tyblue " 路径：${path}"
-        tyblue " 底层传输安全：tls"
-        tyblue " allowInsecure：false"
+        tyblue " 端口(port)            ：443"
+        tyblue " 用户ID(id)            ：${v2id_2}"
+        tyblue " 额外ID(alterId)       ：0"
+        tyblue " 加密(security)        ：使用cdn，推荐auto;不使用cdn，推荐none"
+        tyblue " 传输协议(network)     ：ws"
+        tyblue " 伪装类型(type)        ：none"
+        tyblue " 伪装域名(serverName)  ：空"
+        tyblue " 路径(path)            ：${path}"
+        tyblue " 底层传输安全(security)：tls"
+        tyblue " allowInsecure         ：false"
         tyblue "----------------------------------------------------------"
         echo
         green  " 不使用cdn推荐第一种连接方式"
@@ -1520,7 +1520,7 @@ install_update_v2ray_tls_web()
     systemctl stop v2ray
     uninstall_firewall
     doupdate
-    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf ; then
+    if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/sysctl.conf; then
         echo >> /etc/sysctl.conf
         echo "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" >> /etc/sysctl.conf
     fi
@@ -1655,7 +1655,7 @@ change_dns()
         read choice
     done
     if [ $choice == y ]; then
-        if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/resolv.conf ; then
+        if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/resolv.conf; then
             sed -i 's/^[ ]*nameserver /#&/' /etc/resolv.conf
             echo >> /etc/resolv.conf
             echo 'nameserver 1.1.1.1' >> /etc/resolv.conf
@@ -1818,7 +1818,7 @@ start_menu()
         get_domainlist
         echo_end
     elif [ $choice -eq 9 ]; then
-        if [ $is_installed == 0 ] ; then
+        if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
@@ -1834,7 +1834,7 @@ start_menu()
         green "-------域名重置完成-------"
         echo_end
     elif [ $choice -eq 10 ]; then
-        if [ $is_installed == 0 ] ; then
+        if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
@@ -1851,7 +1851,7 @@ start_menu()
         green "-------域名添加完成-------"
         echo_end
     elif [ $choice -eq 11 ]; then
-        if [ $is_installed == 0 ] ; then
+        if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
@@ -1893,7 +1893,7 @@ start_menu()
         green "-------删除域名完成-------"
         echo_end
     elif [ $choice -eq 12 ]; then
-        if [ $is_installed == 0 ] ; then
+        if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
@@ -1935,7 +1935,7 @@ start_menu()
         green "更换成功！！"
         echo_end
     elif [ $choice -eq 13 ]; then
-        if [ $is_installed == 0 ] ; then
+        if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
@@ -1963,7 +1963,7 @@ start_menu()
         green "更换成功！！"
         echo_end
     elif [ $choice -eq 14 ]; then
-        if [ $is_installed == 0 ] ; then
+        if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
@@ -1990,9 +1990,9 @@ start_menu()
         yellow "尝试修复退格键异常问题，退格键正常请不要修复"
         yellow "按回车键继续或按Ctrl+c退出"
         read -s
-        if stty -a | grep -q 'erase = ^?' ; then
+        if stty -a | grep -q 'erase = ^?'; then
             stty erase '^H'
-        elif stty -a | grep -q 'erase = ^H' ; then
+        elif stty -a | grep -q 'erase = ^H'; then
             stty erase '^?'
         fi
         green "修复完成！！"
