@@ -15,6 +15,10 @@ path=""
 v2id=""
 
 #定义几个颜色
+purple()
+{
+    echo -e "\033[35;1m${@}\033[0m"
+}
 tyblue()                           #天依蓝
 {
     echo -e "\033[36;1m${@}\033[0m"
@@ -1364,29 +1368,37 @@ get_all_webs()
 echo_end()
 {
     echo -e "\n\n\n"
-    tyblue "-------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------"
+    tyblue "--------------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------------"
     tyblue " 服务器类型            ：VLESS"
     tyblue " address(地址)         ：服务器ip"
+    purple "  (Qv2ray:主机;Shadowrocket:服务器)"
     tyblue " port(端口)            ：443"
-    tyblue " id(用户ID)            ：${v2id_1}"
+    tyblue " id(用户ID/UUID)       ：${v2id_1}"
     tyblue " flow(流控)            ：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
     tyblue " encryption(加密)      ：none"
-    tyblue " -----transport(底层传输方式)-----"
+    tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
     tyblue "  network(传输协议)             ：tcp"
+    purple "   (Shadowrocket:传输方式:none)"
     tyblue "  type(伪装类型)                ：none"
+    purple "   (Qv2ray:协议设置-类型)"
     get_all_domains
     if [ ${#all_domains[@]} -eq 1 ]; then
-        tyblue "  serverName(伪装域名/TLS服务器)：${all_domains[@]}"
+        tyblue "  serverName(验证服务端证书域名)：${all_domains[@]}"
     else
-        tyblue "  serverName(伪装域名/TLS服务器)：${all_domains[@]} (任选其一)"
+        tyblue "  serverName(验证服务端证书域名)：${all_domains[@]} (任选其一)"
     fi
+    purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址)"
     tyblue "  path(路径)                    ：空"
-    tyblue "  security(底层传输安全)        ：xtls/tls"
+    tyblue "  security(传输层加密)          ：xtls/tls"
+    purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
     tyblue "  allowInsecure                 ：false"
+    purple "   (Qv2ray:允许不安全的证书(不打勾))"
     tyblue "  tcpFastOpen(TCP快速打开)      ：可以启用"
-    tyblue " ---------------其他--------------"
+    tyblue " ------------------------其他-----------------------"
     tyblue "  Mux(多路复用)                 ：使用XTLS必须关闭;不使用XTLS也建议关闭"
-    tyblue "----------------------------------------------------------"
+    tyblue "  Sniffing(流量探测)            ：建议开启"
+    purple "   (Qv2ray:首选项-入站设置-SOCKS设置-嗅探)"
+    tyblue "------------------------------------------------------------------------"
     echo
     yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
     echo
@@ -1396,28 +1408,35 @@ echo_end()
     green  "   macOS/Linux：Qv2ray  v2.7.0+"
     if [ $mode -eq 1 ]; then
         echo
-        tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
+        tyblue "------------- V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) -------------"
         tyblue " 服务器类型            ：VMess"
         if [ ${#all_domains[@]} -eq 1 ]; then
             tyblue " address(地址)         ：${all_domains[@]}"
         else
             tyblue " address(地址)         ：${all_domains[@]} (任选其一)"
         fi
+        purple "  (Qv2ray:主机;Shadowrocket:服务器)"
         tyblue " port(端口)            ：443"
-        tyblue " id(用户ID)            ：${v2id_2}"
+        tyblue " id(用户ID/UUID)       ：${v2id_2}"
         tyblue " alterId(额外ID)       ：0"
-        tyblue " security(加密)        ：使用cdn，推荐auto;不使用cdn，推荐none"
-        tyblue " -----transport(底层传输方式)-----"
+        tyblue " security(加密方式)    ：使用cdn，推荐auto;不使用cdn，推荐none"
+        purple "  (Qv2ray:安全选项;Shadowrocket:算法)"
+        tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
         tyblue "  network(传输协议)             ：ws"
-        tyblue "  type(伪装类型)                ：none"
-        tyblue "  serverName(伪装域名/TLS服务器)：空"
+        purple "   (Shadowrocket:传输方式:WebSocket)"
+        tyblue "  serverName(验证服务端证书域名)：空"
+        purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址)"
         tyblue "  path(路径)                    ：${path}"
-        tyblue "  security(底层传输安全)        ：tls"
+        tyblue "  security(传输层加密)          ：tls"
+        purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
         tyblue "  allowInsecure                 ：false"
+        purple "   (Qv2ray:允许不安全的证书(不打勾))"
         tyblue "  tcpFastOpen(TCP快速打开)      ：可以启用"
-        tyblue " ---------------其他--------------"
+        tyblue " ------------------------其他-----------------------"
         tyblue "  Mux(多路复用)                 ：建议关闭"
-        tyblue "----------------------------------------------------------"
+        tyblue "  Sniffing(流量探测)            ：建议开启"
+        purple "   (Qv2ray:首选项-入站设置-SOCKS设置-嗅探)"
+        tyblue "------------------------------------------------------------------------"
         echo
         green  " 不使用cdn推荐第一种连接方式"
         yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
