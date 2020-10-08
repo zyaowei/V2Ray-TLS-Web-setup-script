@@ -1391,8 +1391,9 @@ echo_end()
     yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
     echo
     green  " 目前支持支持XTLS的图形化客户端："
-    green  "   Windows：V2RayN  v3.24+"
-    green  "   Android：V2RayNG v1.4.6+"
+    green  "   Windows    ：V2RayN  v3.24+    Qv2ray  v2.7.0+"
+    green  "   Android    ：V2RayNG v1.4.6+"
+    green  "   macOS/Linux：Qv2ray  v2.7.0+"
     if [ $mode -eq 1 ]; then
         echo
         tyblue "------ V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) ------"
@@ -1605,6 +1606,10 @@ install_update_v2ray_tls_web()
         done
         if [ $choice -eq 2 ]; then
             install_nginx
+        else
+            rm -rf ${nginx_prefix}/conf.d
+            rm -rf ${nginx_prefix}/certs
+            cp ${nginx_prefix}/conf/nginx.conf.default ${nginx_prefix}/conf/nginx.conf
         fi
     fi
     mkdir ${nginx_prefix}/conf.d
@@ -1628,8 +1633,8 @@ install_update_v2ray_tls_web()
         v2id_2=`cat /proc/sys/kernel/random/uuid`
         get_random_port
     fi
-    config_v2ray
     config_nginx
+    config_v2ray
     if [ $update == 1 ]; then
         mv "${temp_dir}/domain_backup/"* ${nginx_prefix}/html 2>/dev/null
     else
