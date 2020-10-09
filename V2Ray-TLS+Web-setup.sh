@@ -386,7 +386,7 @@ doupdate()
         done
     }
     echo -e "\n\n\n"
-    tyblue "-----------------------是否将更新系统组件？-----------------------"
+    tyblue "-----------------------是否更新系统组件？-----------------------"
     if [ "$release" == "ubuntu" ]; then
         green  " 1. 更新已安装软件，并升级系统(仅对ubuntu有效)"
         green  " 2. 仅更新已安装软件"
@@ -693,7 +693,7 @@ install_bbr()
         fi
         green "   正在使用：${bbr_info}"
     else
-        red "   bbr未启用！！"
+        red "   bbr未启用"
     fi
     echo
     choice=""
@@ -1000,7 +1000,7 @@ get_cert()
         temp="chown -R nobody:nobody ${nginx_prefix}/certs"
     fi
     if ! $HOME/.acme.sh/acme.sh --installcert -d $1 --key-file ${nginx_prefix}/certs/${1}.key --fullchain-file ${nginx_prefix}/certs/${1}.cer --reloadcmd "$temp && sleep 2s && systemctl restart v2ray" --ecc; then
-        yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项8修复"
+        yellow "证书安装失败，请检查您的域名，确保80端口未打开并且未被占用。并在安装完成后，使用选项9修复"
         yellow "按回车键继续。。。"
         read -s
     fi
