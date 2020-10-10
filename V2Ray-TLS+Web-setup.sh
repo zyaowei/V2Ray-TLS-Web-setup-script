@@ -703,17 +703,6 @@ install_bbr()
     done
     case "$choice" in
         1)
-            if [ $mem_ok == 2 ]; then
-                red "请确保服务器的内存>=512MB，否则更换最新版内核可能无法开机"
-                yellow "按回车键继续或ctrl+c中止"
-                read -s
-                echo
-            elif [ $mem_ok == 0 ]; then 
-                red "检测到内存过小，更换最新版内核可能无法开机，请谨慎选择"
-                yellow "按回车键以继续或ctrl+c中止"
-                read -s
-                echo
-            fi
             sed -i '/^[ ]*net.core.default_qdisc[ ]*=/d' /etc/sysctl.conf
             sed -i '/^[ ]*net.ipv4.tcp_congestion_control[ ]*=/d' /etc/sysctl.conf
             echo 'net.core.default_qdisc = fq' >> /etc/sysctl.conf
@@ -1228,6 +1217,9 @@ config_v2ray()
     local i
 cat > $v2ray_config <<EOF
 {
+    "log": {
+        "loglevel": "none"
+    },
     "inbounds": [
         {
             "port": 443,
@@ -1236,7 +1228,7 @@ cat > $v2ray_config <<EOF
                 "clients": [
                     {
                         "id": "$v2id_1",
-                        "flow": "xtls-rprx-origin",
+                        "flow": "xtls-rprx-direct",
                         "level": 2
                     }
                 ],
@@ -1367,32 +1359,31 @@ get_all_webs()
 
 echo_end()
 {
+    get_all_domains
     echo -e "\n\n\n"
     tyblue "--------------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------------"
     tyblue " 服务器类型            ：VLESS"
     tyblue " address(地址)         ：服务器ip"
-    purple "  (Qv2ray:主机;Shadowrocket:服务器)"
+    purple "  (Qv2ray:主机)"
     tyblue " port(端口)            ：443"
     tyblue " id(用户ID/UUID)       ：${v2id_1}"
-    tyblue " flow(流控)            ：使用XTLS：xtls-rprx-origin-udp443;不使用XTLS：空"
+    tyblue " flow(流控)            ：使用XTLS：xtls-rprx-direct-udp443;使用TLS：空"
     tyblue " encryption(加密)      ：none"
     tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
     tyblue "  network(传输协议)             ：tcp"
     purple "   (Shadowrocket:传输方式:none)"
     tyblue "  type(伪装类型)                ：none"
     purple "   (Qv2ray:协议设置-类型)"
-    get_all_domains
+    tyblue "  security(传输层加密)          ：xtls/tls"
+    purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
     if [ ${#all_domains[@]} -eq 1 ]; then
         tyblue "  serverName(验证服务端证书域名)：${all_domains[@]}"
     else
         tyblue "  serverName(验证服务端证书域名)：${all_domains[@]} (任选其一)"
     fi
-    purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址)"
-    tyblue "  path(路径)                    ：空"
-    tyblue "  security(传输层加密)          ：xtls/tls"
-    purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
+    purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址;Shadowrocket:Peer 名称)"
     tyblue "  allowInsecure                 ：false"
-    purple "   (Qv2ray:允许不安全的证书(不打勾))"
+    purple "   (Qv2ray:允许不安全的证书(不打勾);Shadowrocket:允许不安全(关闭))"
     tyblue "  tcpFastOpen(TCP快速打开)      ：可以启用"
     tyblue " ------------------------其他-----------------------"
     tyblue "  Mux(多路复用)                 ：使用XTLS必须关闭;不使用XTLS也建议关闭"
@@ -1401,10 +1392,11 @@ echo_end()
     tyblue "------------------------------------------------------------------------"
     echo
     yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
+    yellow " 使用XLTS请确保客户端V2Ray版本为v4.31.0+(XTLS在4.31.0版本中对流控进行了一次升级，并且不向下兼容)"
     echo
     green  " 目前支持支持XTLS的图形化客户端："
-    green  "   Windows    ：V2RayN  v3.24+    Qv2ray  v2.7.0+"
-    green  "   Android    ：V2RayNG v1.4.6+"
+    green  "   Windows    ：V2RayN  v3.26+  Qv2ray  v2.7.0+"
+    green  "   Android    ：V2RayNG v1.4.8+"
     green  "   macOS/Linux：Qv2ray  v2.7.0+"
     if [ $mode -eq 1 ]; then
         echo
@@ -1415,7 +1407,7 @@ echo_end()
         else
             tyblue " address(地址)         ：${all_domains[@]} (任选其一)"
         fi
-        purple "  (Qv2ray:主机;Shadowrocket:服务器)"
+        purple "  (Qv2ray:主机)"
         tyblue " port(端口)            ：443"
         tyblue " id(用户ID/UUID)       ：${v2id_2}"
         tyblue " alterId(额外ID)       ：0"
@@ -1423,14 +1415,16 @@ echo_end()
         purple "  (Qv2ray:安全选项;Shadowrocket:算法)"
         tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
         tyblue "  network(传输协议)             ：ws"
-        purple "   (Shadowrocket:传输方式:WebSocket)"
-        tyblue "  serverName(验证服务端证书域名)：空"
-        purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址)"
+        purple "   (Shadowrocket:传输方式:websocket)"
         tyblue "  path(路径)                    ：${path}"
+        tyblue "  Host                          ：空"
+        purple "   (V2RayN(G):伪装域名;Qv2ray:协议设置-请求头)"
         tyblue "  security(传输层加密)          ：tls"
         purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
+        tyblue "  serverName(验证服务端证书域名)：空"
+        purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址;Shadowrocket:Peer 名称)"
         tyblue "  allowInsecure                 ：false"
-        purple "   (Qv2ray:允许不安全的证书(不打勾))"
+        purple "   (Qv2ray:允许不安全的证书(不打勾);Shadowrocket:允许不安全(关闭))"
         tyblue "  tcpFastOpen(TCP快速打开)      ：可以启用"
         tyblue " ------------------------其他-----------------------"
         tyblue "  Mux(多路复用)                 ：建议关闭"
@@ -1446,7 +1440,7 @@ echo_end()
     tyblue " 修改$nginx_config"
     tyblue " 将v.qq.com修改为你要镜像的网站"
     echo
-    tyblue " 脚本最后更新时间：2020.10.08"
+    tyblue " 脚本最后更新时间：2020.10.10"
     echo
     red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
     tyblue " 2020.08"
