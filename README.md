@@ -4,7 +4,7 @@
 
 2.集成 多版本bbr/锐速 安装选项
  
-3.支持多种系统 (Ubuntu CentOS Debian deepin ...) 
+3.支持多种系统 (Ubuntu CentOS Debian deepin fedora ...) 
 
 4.集成删除阿里云盾和腾讯云盾功能 (仅对阿里云和腾讯云服务器有效)
 
@@ -21,11 +21,11 @@
 ### 1. 安装wget
 Debian基系统(包括Ubuntu、Debian、deepin)：
 ```bash
-command -v wget > /dev/null 2>&1 || apt -y install wget || (apt update && apt -y install wget)
+[[ "$(type -P wget)" ]] || apt -y install wget || (apt update && apt -y install wget)
 ```
-Red Hat基系统(包括CentOS)：
+Red Hat基系统(包括CentOS、fedora)：
 ```bash
-command -v wget > /dev/null 2>&1 || yum -y install wget
+[[ "$(type -P wget)" ]] || yum -y install wget
 ```
 ### 2. 获取脚本
 ```bash
