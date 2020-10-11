@@ -1758,8 +1758,8 @@ start_menu()
     tyblue "      (会覆盖原有域名配置，安装过程中域名输错了造成V2Ray无法启动可以用此选项修复)"
     tyblue "  10. 添加域名"
     tyblue "  11. 删除域名"
-    tyblue "  12. 修改用户ID(id)"
-    tyblue "  13. 修改路径(path)"
+    tyblue "  12. 修改id(用户ID/UUID)"
+    tyblue "  13. 修改path(路径)"
     tyblue "  14. 修改安装模式(TCP/WebSocket)"
     echo
     tyblue " ----------------其它----------------"
@@ -1919,7 +1919,7 @@ start_menu()
             exit 0
         fi
         $HOME/.acme.sh/acme.sh --remove --domain ${domain_list[$delete]} --ecc
-        rm -rf $HOME/.acme.sh/${domain_list[$delete]}
+        rm -rf $HOME/.acme.sh/${domain_list[$delete]}_ecc
         rm -rf ${nginx_prefix}/html/${domain_list[$delete]}
         unset domain_list[$delete]
         unset domainconfig_list[$delete]
@@ -1942,9 +1942,9 @@ start_menu()
         get_base_information
         local flag=1
         if [ $mode -eq 1 ]; then
-            tyblue "-------------请输入你要修改的ID-------------"
-            tyblue " 1.VLESS服务器ID(V2Ray-TCP+XTLS)"
-            tyblue " 2.VMess服务器ID(V2Ray-WebSocket+TLS)"
+            tyblue "-------------请输入你要修改的id-------------"
+            tyblue " 1.VLESS服务器id(V2Ray-TCP+XTLS)"
+            tyblue " 2.VMess服务器id(V2Ray-WebSocket+TLS)"
             echo
             choice=""
             while [ "$choice" != "1" -a "$choice" != "2" ]
@@ -1954,7 +1954,7 @@ start_menu()
             flag=$choice
         fi
         local v2id="v2id_$flag"
-        tyblue "您现在的ID是：${!v2id}"
+        tyblue "您现在的id是：${!v2id}"
         choice=""
         while [ "$choice" != "y" -a "$choice" != "n" ]
         do
@@ -1964,7 +1964,7 @@ start_menu()
         if [ $choice == "n" ]; then
             exit 0
         fi
-        tyblue "-------------请输入新的ID-------------"
+        tyblue "-------------请输入新的id-------------"
         read v2id
         if [ $flag -eq 1 ]; then
             v2id_1="$v2id"
