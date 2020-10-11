@@ -25,7 +25,7 @@ Debian基系统(包括Ubuntu、Debian、deepin)：
 ```
 Red Hat基系统(包括CentOS、fedora)：
 ```bash
-[[ "$(type -P wget)" ]] || yum -y install wget
+[[ "$(type -P wget)" ]] || dnf -y install wget || yum -y install wget
 ```
 ### 2. 获取脚本
 ```bash
