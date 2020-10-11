@@ -426,7 +426,9 @@ doupdate()
         yellow " 更新过程中若有问话/对话框，优先选择yes/y/第一个选项"
         yellow " 按回车键继续。。。"
         read -s
+        $redhat_package_manager -y autoremove
         $redhat_package_manager -y update
+        apt -y --purge autoremove
         apt update
         apt -y full-upgrade
         apt -y --purge autoremove
