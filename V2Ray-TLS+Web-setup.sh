@@ -12,7 +12,8 @@ unset pretend_list
 mode=""
 port=""
 path=""
-v2id=""
+v2id_1=""
+v2id_2=""
 
 #定义几个颜色
 purple()
@@ -1634,6 +1635,7 @@ install_update_v2ray_tls_web()
     systemctl enable v2ray
 
     green "正在获取证书。。。。"
+    [ -e $HOME/.acme.sh/acme.sh ] && $HOME/.acme.sh/acme.sh --uninstall
     curl https://get.acme.sh | sh
     $HOME/.acme.sh/acme.sh --upgrade --auto-upgrade
     get_all_certs
@@ -1757,7 +1759,7 @@ start_menu()
     tyblue "  11. 删除域名"
     tyblue "  12. 修改用户ID(id)"
     tyblue "  13. 修改路径(path)"
-    tyblue "  14. 修改安装模式(TCP/ws)"
+    tyblue "  14. 修改安装模式(TCP/WebSocket)"
     echo
     tyblue " ----------------其它----------------"
     tyblue "  15. 尝试修复退格键无法使用的问题"
@@ -1812,6 +1814,7 @@ start_menu()
         fi
         remove_v2ray
         remove_nginx
+        $HOME/.acme.sh/acme.sh --uninstall
         green  "删除完成！"
     elif [ $choice -eq 6 ]; then
         if systemctl is-active v2ray > /dev/null 2>&1 && systemctl is-active nginx > /dev/null 2>&1; then
@@ -1836,7 +1839,7 @@ start_menu()
     elif [ $choice -eq 7 ]; then
         systemctl stop nginx
         systemctl stop v2ray
-        green  "----------------V2Ray-TLS+Web已停止----------------"
+        green  "已停止！"
     elif [ $choice -eq 8 ]; then
         get_base_information
         get_domainlist
@@ -1846,6 +1849,16 @@ start_menu()
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
+        $HOME/.acme.sh/acme.sh --uninstall
+        curl https://get.acme.sh | sh
+        get_domainlist
+        for i in ${!domain_list[@]}
+        do
+            rm -rf ${nginx_prefix}/html/${domain_list[$i]}
+        done
+        unset domain_list
+        unset domainconfig_list
+        unset pretend_list
         readDomain
         get_base_information
         get_all_certs
@@ -1855,16 +1868,16 @@ start_menu()
         sleep 2s
         systemctl restart nginx
         systemctl restart v2ray
-        green "-------域名重置完成-------"
+        green "域名重置完成！！"
         echo_end
     elif [ $choice -eq 10 ]; then
         if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
-        get_base_information
         get_domainlist
         readDomain
+        get_base_information
         get_cert ${domain_list[-1]} ${domainconfig_list[-1]}
         get_web ${domain_list[-1]} ${pretend_list[-1]}
         config_nginx
@@ -1872,14 +1885,13 @@ start_menu()
         sleep 2s
         systemctl restart nginx
         systemctl restart v2ray
-        green "-------域名添加完成-------"
+        green "域名添加完成！！"
         echo_end
     elif [ $choice -eq 11 ]; then
         if [ $is_installed == 0 ]; then
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
-        get_base_information
         get_domainlist
         if [ ${#domain_list[@]} -le 1 ]; then
             red "只有一个域名"
@@ -1903,6 +1915,7 @@ start_menu()
         if [ $delete -eq ${#domain_list[@]} ]; then
             exit 0
         fi
+        $HOME/.acme.sh/acme.sh --remove --domain ${domain_list[$delete]} --ecc
         rm -rf ${nginx_prefix}/html/${domain_list[$delete]}
         unset domain_list[$delete]
         unset domainconfig_list[$delete]
@@ -1910,11 +1923,12 @@ start_menu()
         domain_list=(${domain_list[@]})
         domainconfig_list=(${domainconfig_list[@]})
         pretend_list=(${pretend_list[@]})
+        get_base_information
         config_nginx
         config_v2ray
         systemctl restart nginx
         systemctl restart v2ray
-        green "-------删除域名完成-------"
+        green "域名删除完成！！"
         echo_end
     elif [ $choice -eq 12 ]; then
         if [ $is_installed == 0 ]; then
@@ -1992,7 +2006,6 @@ start_menu()
             exit 1
         fi
         get_base_information
-        get_domainlist
         local old_mode=$mode
         readMode
         if [ $mode -eq $old_mode ]; then
@@ -2005,6 +2018,7 @@ start_menu()
             v2id_2=`cat /proc/sys/kernel/random/uuid`
             get_random_port
         fi
+        get_domainlist
         config_v2ray
         systemctl restart v2ray
         green "更换成功！！"
