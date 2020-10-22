@@ -76,6 +76,10 @@ turn_off_selinux()
     setenforce 0
     sed -i 's/^[ \t]*SELINUX[ \t]*=[ \t]*enforcing[ \t]*$/SELINUX=disabled/g' /etc/sysconfig/selinux
 }
+if [[ ! -f '/etc/os-release' ]]; then
+    red "系统版本太老，V2Ray官方脚本不支持"
+    exit 1
+fi
 if [[ -f /.dockerenv ]] || grep -q 'docker\|lxc' /proc/1/cgroup && [[ "$(type -P systemctl)" ]]; then
     true
 elif [[ -d /run/systemd/system ]] || grep -q systemd <(ls -l /sbin/init); then
