@@ -1,6 +1,6 @@
 #!/bin/bash
 nginx_version="nginx-1.19.3"
-openssl_version="openssl-openssl-3.0.0-alpha6"
+openssl_version="openssl-openssl-3.0.0-alpha7"
 v2ray_config="/usr/local/etc/v2ray/config.json"
 nginx_prefix="/etc/nginx"
 nginx_config="${nginx_prefix}/conf.d/v2ray.conf"
@@ -383,7 +383,7 @@ doupdate()
                 do-release-upgrade
             fi
             apt update
-            apt -y full-upgrade
+            apt -y --auto-remove --purge full-upgrade
         done
     }
     echo -e "\n\n\n"
@@ -417,7 +417,6 @@ doupdate()
         done
     fi
     if [[ "$release" == "ubuntu" && "$choice" == "1" ]]; then
-        apt -y --purge autoremove
         updateSystem
         apt -y --purge autoremove
         apt clean
@@ -428,9 +427,8 @@ doupdate()
         read -s
         $redhat_package_manager -y autoremove
         $redhat_package_manager -y update
-        apt -y --purge autoremove
         apt update
-        apt -y full-upgrade
+        apt -y --auto-remove --purge full-upgrade
         apt -y --purge autoremove
         apt clean
         $redhat_package_manager -y autoremove
