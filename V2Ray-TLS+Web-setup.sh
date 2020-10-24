@@ -975,11 +975,11 @@ install_update_v2ray()
     if ! grep -qE 'LimitNPROC|LimitNOFILE' /etc/systemd/system/v2ray.service /etc/systemd/system/v2ray@.service; then
         echo >> /etc/systemd/system/v2ray.service
         echo "[Service]" >> /etc/systemd/system/v2ray.service
-        echo "LimitNPROC=500" >> /etc/systemd/system/v2ray.service
+        echo "LimitNPROC=10000" >> /etc/systemd/system/v2ray.service
         echo "LimitNOFILE=1000000" >> /etc/systemd/system/v2ray.service
         echo >> /etc/systemd/system/v2ray@.service
         echo "[Service]" >> /etc/systemd/system/v2ray@.service
-        echo "LimitNPROC=500" >> /etc/systemd/system/v2ray@.service
+        echo "LimitNPROC=10000" >> /etc/systemd/system/v2ray@.service
         echo "LimitNOFILE=1000000" >> /etc/systemd/system/v2ray@.service
         systemctl daemon-reload
         sleep 1s
