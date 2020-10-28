@@ -49,7 +49,7 @@ chmod +x V2Ray-TLS+Web-setup.sh
     <img width="400" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/menu.jpg">
 </div>
 <div>
-    <img width="600" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/mode.jpg">
+    <img width="600" src="https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/blob/master/image/protocol.jpg">
 </div>
 
 ## 注
