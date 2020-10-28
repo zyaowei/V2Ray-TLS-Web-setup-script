@@ -1,5 +1,5 @@
 #!/bin/bash
-nginx_version="nginx-1.19.3"
+nginx_version="nginx-1.19.4"
 openssl_version="openssl-openssl-3.0.0-alpha7"
 v2ray_config="/usr/local/etc/v2ray/config.json"
 nginx_prefix="/etc/nginx"
@@ -9,7 +9,10 @@ temp_dir="/temp_install_update_v2ray_tls_web"
 unset domain_list
 unset domainconfig_list
 unset pretend_list
-mode=""
+#V2Ray-TCP-TLS使用的协议，0代表禁用，1代表VLESS
+protocol_1=""
+#V2Ray-WS-TLS使用的协议，0代表禁用，1代表VLESS，2代表VMess
+protocol_2=""
 port=""
 path=""
 v2id_1=""
@@ -713,7 +716,6 @@ install_bbr()
             echo 'net.core.default_qdisc = fq' >> /etc/sysctl.conf
             echo 'net.ipv4.tcp_congestion_control = bbr' >> /etc/sysctl.conf
             sysctl -p
-            rm -rf update-kernel.sh
             if ! wget -O update-kernel.sh https://github.com/kirin10000/update-kernel/raw/master/update-kernel.sh; then
                 red    "获取内核升级脚本失败"
                 yellow "按回车键继续或者按ctrl+c终止"
@@ -738,7 +740,6 @@ install_bbr()
             sysctl -p
             sleep 1s
             if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
-                rm -rf bbr.sh
                 if ! wget -O bbr.sh https://github.com/teddysun/across/raw/master/bbr.sh; then
                     red    "获取bbr脚本失败"
                     yellow "按回车键继续或者按ctrl+c终止"
@@ -756,7 +757,6 @@ install_bbr()
             tyblue " 重启后，请再次选择这个选项完成bbr2剩余部分安装(开启bbr和ECN)"
             yellow " 按回车键以继续。。。。"
             read -s
-            rm -rf bbr2.sh
             if [ $release == "ubuntu" ] || [ $release == "other-debian" ]; then
                 if ! wget -O bbr2.sh https://github.com/yeyingorg/bbr2.sh/raw/master/bbr2.sh; then
                     red    "获取bbr2脚本失败"
@@ -775,7 +775,6 @@ install_bbr()
             install_bbr
             ;;
         4)
-            rm -rf tcp.sh
             if ! wget -O tcp.sh "https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh"; then
                 red    "获取脚本失败"
                 yellow "按回车键继续或者按ctrl+c终止"
@@ -865,28 +864,46 @@ readDomain()
     pretend_list+=("$pretend")
 }
 
-#读取安装模式
-readMode()
+#读取v2ray_protocol配置
+readProtocolConfig()
 {
     echo -e "\n\n\n"
-    tyblue "------------------------------请选安装模式------------------------------"
-    tyblue " 1. (V2Ray-TCP+XTLS) + (V2Ray-WebSocket+TLS) + Web"
-    green  "    适合有时使用cdn"
-    tyblue " 2. V2Ray-TCP+XTLS+Web"
-    green  "    适合不使用cdn"
-    tyblue " 3. V2Ray-WebSocket+TLS+Web"
-    green  "    适合一直使用cdn"
+    tyblue "---------------------请选择V2Ray要使用协议---------------------"
+    tyblue " 1. (VLESS-TCP+XTLS) + (VMess-WebSocket+TLS) + Web"
+    green  "    适合有时使用CDN，且CDN可信任"
+    tyblue " 2. (VLESS-TCP+XTLS) + (VLESS-WebSocket+TLS) + Web"
+    green  "    适合有时使用CDN，且CDN不可信任(如国内CDN)"
+    tyblue " 3. VLESS-TCP+XTLS+Web"
+    green  "    适合完全不用CDN"
+    tyblue " 4. VMess-WebSocket+TLS+Web"
+    green  "    适合一直使用CDN，且CDN可信任"
+    tyblue " 5. VLESS-WebSocket+TLS+Web"
+    green  "    适合一直使用CDN，且CDN不可信任(如国内CDN)"
     echo
-    yellow " 注：XTLS完全兼容TLS"
+    yellow " 注："
+    yellow "   1.XTLS完全兼容TLS"
+    yellow "   2.VLESS协议用于CDN，CDN可以看见传输的明文"
     echo
-    mode=""
-    while [[ x"$mode" != x"1" && x"$mode" != x"2" && x"$mode" != x"3" ]]
+    local mode=""
+    while [[ "$mode" != "1" && "$mode" != "2" && "$mode" != "3" && "$mode" != "4" && "$mode" != "5" ]]
     do
         read -p "您的选择是：" mode
     done
-    if [ $mode -eq 3 ]; then
-        yellow "请使用这个脚本安装：https://github.com/kirin10000/V2Ray-WebSocket-TLS-Web-setup-script"
-        exit 0
+    if [ $mode -eq 1 ]; then
+        protocol_1=1
+        protocol_2=2
+    elif [ $mode -eq 2 ]; then
+        protocol_1=1
+        protocol_2=1
+    elif [ $mode -eq 3 ]; then
+        protocol_1=1
+        protocol_2=0
+    elif [ $mode -eq 4 ]; then
+        protocol_1=0
+        protocol_2=2
+    elif [ $mode -eq 5 ]; then
+        protocol_1=0
+        protocol_2=1
     fi
 }
 
@@ -972,6 +989,8 @@ install_update_v2ray()
         read -s
         return 1
     fi
+    #解决透明代理 Too many files 问题
+    #https://guide.v2fly.org/app/tproxy.html#%E8%A7%A3%E5%86%B3-too-many-open-files-%E9%97%AE%E9%A2%98
     if ! grep -qE 'LimitNPROC|LimitNOFILE' /etc/systemd/system/v2ray.service /etc/systemd/system/v2ray@.service; then
         echo >> /etc/systemd/system/v2ray.service
         echo "[Service]" >> /etc/systemd/system/v2ray.service
@@ -1244,6 +1263,9 @@ cat > $v2ray_config <<EOF
             "port": 443,
             "protocol": "vless",
             "settings": {
+EOF
+    if [ $protocol_1 -eq 1 ]; then
+cat >> $v2ray_config <<EOF
                 "clients": [
                     {
                         "id": "$v2id_1",
@@ -1251,10 +1273,11 @@ cat > $v2ray_config <<EOF
                         "level": 2
                     }
                 ],
-                "decryption": "none",
-                "fallbacks": [
 EOF
-    if [ $mode -eq 1 ]; then
+    fi
+    echo '                "decryption": "none",' >> $v2ray_config
+    echo '                "fallbacks": [' >> $v2ray_config
+    if [ $protocol_2 -ne 0 ]; then
 cat >> $v2ray_config <<EOF
                     {
                         "path": "$path",
@@ -1306,20 +1329,29 @@ cat >> $v2ray_config <<EOF
                 }
             }
 EOF
-    if [ $mode -eq 1 ]; then
+    if [ $protocol_2 -ne 0 ]; then
+        echo '        },' >> $v2ray_config
+        echo '        {' >> $v2ray_config
+        echo '            "port": '"$port," >> $v2ray_config
+        echo '            "listen": "127.0.0.1",' >> $v2ray_config
+        if [ $protocol_2 -eq 2 ]; then
+            echo '            "protocol": "vmess",' >> $v2ray_config
+        else
+            echo '            "protocol": "vless",' >> $v2ray_config
+        fi
+        echo '            "settings": {' >> $v2ray_config
+        echo '                "clients": [' >> $v2ray_config
+        echo '                    {' >> $v2ray_config
+        echo '                        "id": "'"$v2id_2"'",' >> $v2ray_config
+        echo '                        "level": 1' >> $v2ray_config
+        echo '                    }' >> $v2ray_config
+        if [ $protocol_2 -eq 2 ]; then
+            echo '                ]' >> $v2ray_config
+        else
+            echo '                ],' >> $v2ray_config
+            echo '                "decryption": "none"' >> $v2ray_config
+        fi
 cat >> $v2ray_config <<EOF
-        },
-        {
-            "port": $port,
-            "listen": "127.0.0.1",
-            "protocol": "vmess",
-            "settings": {
-                "clients": [
-                    {
-                        "id": "$v2id_2",
-                        "level": 1
-                    }
-                ]
             },
             "streamSettings": {
                 "network": "ws",
@@ -1330,12 +1362,10 @@ cat >> $v2ray_config <<EOF
                     "tcpFastOpen": true
                 }
             }
-        }
 EOF
-    else
-        echo "        }" >> $v2ray_config
     fi
 cat >> $v2ray_config <<EOF
+        }
     ],
     "outbounds": [
         {
@@ -1380,46 +1410,52 @@ echo_end()
 {
     get_all_domains
     echo -e "\n\n\n"
-    tyblue "--------------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------------"
-    tyblue " 服务器类型            ：VLESS"
-    tyblue " address(地址)         ：服务器ip"
-    purple "  (Qv2ray:主机)"
-    tyblue " port(端口)            ：443"
-    tyblue " id(用户ID/UUID)       ：${v2id_1}"
-    tyblue " flow(流控)            ：使用XTLS：xtls-rprx-direct-udp443;使用TLS：空"
-    tyblue " encryption(加密)      ：none"
-    tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
-    tyblue "  network(传输协议)             ：tcp"
-    purple "   (Shadowrocket:传输方式:none)"
-    tyblue "  type(伪装类型)                ：none"
-    purple "   (Qv2ray:协议设置-类型)"
-    tyblue "  security(传输层加密)          ：xtls/tls"
-    purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
-    if [ ${#all_domains[@]} -eq 1 ]; then
-        tyblue "  serverName(验证服务端证书域名)：${all_domains[@]}"
-    else
-        tyblue "  serverName(验证服务端证书域名)：${all_domains[@]} (任选其一)"
+    if [ $protocol_1 -ne 0 ]; then
+        tyblue "--------------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------------"
+        tyblue " 服务器类型            ：VLESS"
+        tyblue " address(地址)         ：服务器ip"
+        purple "  (Qv2ray:主机)"
+        tyblue " port(端口)            ：443"
+        tyblue " id(用户ID/UUID)       ：${v2id_1}"
+        tyblue " flow(流控)            ：使用XTLS：xtls-rprx-direct-udp443;使用TLS：空"
+        tyblue " encryption(加密)      ：none"
+        tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
+        tyblue "  network(传输协议)             ：tcp"
+        purple "   (Shadowrocket:传输方式:none)"
+        tyblue "  type(伪装类型)                ：none"
+        purple "   (Qv2ray:协议设置-类型)"
+        tyblue "  security(传输层加密)          ：xtls/tls"
+        purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
+        if [ ${#all_domains[@]} -eq 1 ]; then
+            tyblue "  serverName(验证服务端证书域名)：${all_domains[@]}"
+        else
+            tyblue "  serverName(验证服务端证书域名)：${all_domains[@]} (任选其一)"
+        fi
+        purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址;Shadowrocket:Peer 名称)"
+        tyblue "  allowInsecure                 ：false"
+        purple "   (Qv2ray:允许不安全的证书(不打勾);Shadowrocket:允许不安全(关闭))"
+        tyblue "  tcpFastOpen(TCP快速打开)      ：可以启用"
+        tyblue " ------------------------其他-----------------------"
+        tyblue "  Mux(多路复用)                 ：使用XTLS必须关闭;不使用XTLS也建议关闭"
+        tyblue "  Sniffing(流量探测)            ：建议开启"
+        purple "   (Qv2ray:首选项-入站设置-SOCKS设置-嗅探)"
+        tyblue "------------------------------------------------------------------------"
+        echo
+        yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
+        yellow " 使用XLTS请确保客户端V2Ray版本为v4.31.0+(XTLS在4.31.0版本中对流控进行了一次升级，并且不向下兼容)"
+        echo
+        green  " 目前支持支持XTLS的图形化客户端："
+        green  "   Windows    ：V2RayN  v3.26+"
+        green  "   Android    ：V2RayNG v1.4.8+"
     fi
-    purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址;Shadowrocket:Peer 名称)"
-    tyblue "  allowInsecure                 ：false"
-    purple "   (Qv2ray:允许不安全的证书(不打勾);Shadowrocket:允许不安全(关闭))"
-    tyblue "  tcpFastOpen(TCP快速打开)      ：可以启用"
-    tyblue " ------------------------其他-----------------------"
-    tyblue "  Mux(多路复用)                 ：使用XTLS必须关闭;不使用XTLS也建议关闭"
-    tyblue "  Sniffing(流量探测)            ：建议开启"
-    purple "   (Qv2ray:首选项-入站设置-SOCKS设置-嗅探)"
-    tyblue "------------------------------------------------------------------------"
-    echo
-    yellow " 请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
-    yellow " 使用XLTS请确保客户端V2Ray版本为v4.31.0+(XTLS在4.31.0版本中对流控进行了一次升级，并且不向下兼容)"
-    echo
-    green  " 目前支持支持XTLS的图形化客户端："
-    green  "   Windows    ：V2RayN  v3.26+"
-    green  "   Android    ：V2RayNG v1.4.8+"
-    if [ $mode -eq 1 ]; then
+    if [ $protocol_2 -ne 0 ]; then
         echo
         tyblue "------------- V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) -------------"
-        tyblue " 服务器类型            ：VMess"
+        if [ $protocol_2 -eq 1 ]; then
+            tyblue " 服务器类型            ：VLESS"
+        else
+            tyblue " 服务器类型            ：VMess"
+        fi
         if [ ${#all_domains[@]} -eq 1 ]; then
             tyblue " address(地址)         ：${all_domains[@]}"
         else
@@ -1428,9 +1464,14 @@ echo_end()
         purple "  (Qv2ray:主机)"
         tyblue " port(端口)            ：443"
         tyblue " id(用户ID/UUID)       ：${v2id_2}"
-        tyblue " alterId(额外ID)       ：0"
-        tyblue " security(加密方式)    ：使用cdn，推荐auto;不使用cdn，推荐none"
-        purple "  (Qv2ray:安全选项;Shadowrocket:算法)"
+        if [ $protocol_2 -eq 1 ]; then
+            tyblue " flow(流控)            ：空"
+            tyblue " encryption(加密)      ：none"
+        else
+            tyblue " alterId(额外ID)       ：0"
+            tyblue " security(加密方式)    ：使用cdn，推荐auto;不使用cdn，推荐none"
+            purple "  (Qv2ray:安全选项;Shadowrocket:算法)"
+        fi
         tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
         tyblue "  network(传输协议)             ：ws"
         purple "   (Shadowrocket:传输方式:websocket)"
@@ -1450,8 +1491,11 @@ echo_end()
         purple "   (Qv2ray:首选项-入站设置-SOCKS设置-嗅探)"
         tyblue "------------------------------------------------------------------------"
         echo
-        green  " 不使用cdn推荐第一种连接方式"
-        yellow " 使用第二种连接方式时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
+        if [ $protocol_2 -eq 2 ]; then
+            yellow " 使用 VMess-WebSocket+TLS+Web 时，请尽快将V2Ray升级至v4.28.0+以启用VMessAEAD"
+        else
+            yellow " 使用 VLESS-WebSocket+TLS+Web 时，请确保客户端V2Ray版本为v4.30.0+(VLESS在4.30.0版本中对UDP传输进行了一次更新，并且不向下兼容)"
+        fi
     fi
     echo
     tyblue " 如果要更换被镜像的伪装网站"
@@ -1464,15 +1508,21 @@ echo_end()
     tyblue " 2020.08"
 }
 
-#获取配置信息 path port v2id_1 v2id_2 mode
+#获取配置信息 protocol_1 v2id_1 protocol_2 v2id_2 path port
 get_base_information()
 {
-    v2id_1=`grep id $v2ray_config | head -n 1`
-    v2id_1=${v2id_1##*' '}
-    v2id_1=${v2id_1#*'"'}
-    v2id_1=${v2id_1%'"'*}
+    if grep -q "flow" $v2ray_config; then
+        protocol_1=1
+        v2id_1=`grep id $v2ray_config | head -n 1`
+        v2id_1=${v2id_1##*' '}
+        v2id_1=${v2id_1#*'"'}
+        v2id_1=${v2id_1%'"'*}
+    else
+        protocol_1=0
+        v2id_1=""
+    fi
     if [ $(grep -E "vmess|vless" $v2ray_config | wc -l) -eq 2 ]; then
-        mode=1
+        grep -q "vmess" $v2ray_config && protocol_2=2 || protocol_2=1
         port=`grep port $v2ray_config | tail -n 1`
         port=${port##*' '}
         port=${port%%,*}
@@ -1485,7 +1535,7 @@ get_base_information()
         v2id_2=${v2id_2#*'"'}
         v2id_2=${v2id_2%'"'*}
     else
-        mode=2
+        protocol_2=0
         port=""
         path=""
         v2id_2=""
@@ -1575,7 +1625,7 @@ install_update_v2ray_tls_web()
 #读取信息
     if [ $update == 0 ]; then
         readDomain
-        readMode
+        readProtocolConfig
     else
         get_base_information
         get_domainlist
@@ -1685,35 +1735,56 @@ install_update_v2ray_tls_web()
     rm -rf "$temp_dir"
 }
 
-#修改dns
-change_dns()
-{
-    red    "注意！！"
-    red    "1.部分云服务商(如阿里云)使用本地服务器作为软件包源，修改dns后需要换源！！"
-    red    "  如果听不懂，那么请在安装完v2ray+ws+tls后再修改dns，并且修改完后不要重新安装"
-    red    "2.Ubuntu系统重启后可能会恢复原dns"
-    tyblue "此操作将修改dns服务器为1.1.1.1和1.0.0.1(cloudflare公共dns)"
-    choice=""
-    while [ "$choice" != "y" -a "$choice" != "n" ]
-    do
-        tyblue "是否要继续?(y/n)"
-        read choice
-    done
-    if [ $choice == y ]; then
-        if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/resolv.conf; then
-            sed -i 's/^[ \t]*nameserver[ \t][ \t]*/#&/' /etc/resolv.conf
-            echo >> /etc/resolv.conf
-            echo 'nameserver 1.1.1.1' >> /etc/resolv.conf
-            echo 'nameserver 1.0.0.1' >> /etc/resolv.conf
-            echo '#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script' >> /etc/resolv.conf
-        fi
-        green "修改完成！！"
-    fi
-}
-
 #开始菜单
 start_menu()
 {
+    change_protocol()
+    {
+        get_base_information
+        local protocol_1_old=$protocol_1
+        local protocol_2_old=$protocol_2
+        readProtocolConfig
+        if [ $protocol_1_old -eq $protocol_1 ] && [ $protocol_2_old -eq $protocol_2 ]; then
+            red "传输协议未更换"
+            exit 0
+        fi
+        [ $protocol_1_old -eq 0 ] && [ $protocol_1 -ne 0 ] && v2id_1=`cat /proc/sys/kernel/random/uuid`
+        if [ $protocol_2_old -eq 0 ] && [ $protocol_2 -ne 0 ]; then
+            path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
+            path="/$path"
+            v2id_2=`cat /proc/sys/kernel/random/uuid`
+            get_random_port
+        fi
+        get_domainlist
+        config_v2ray
+        systemctl restart v2ray
+        green "更换成功！！"
+        echo_end
+    }
+    change_dns()
+    {
+        red    "注意！！"
+        red    "1.部分云服务商(如阿里云)使用本地服务器作为软件包源，修改dns后需要换源！！"
+        red    "  如果不明白，那么请在安装完成后再修改dns，并且修改完后不要重新安装"
+        red    "2.Ubuntu系统重启后可能会恢复原dns"
+        tyblue "此操作将修改dns服务器为1.1.1.1和1.0.0.1(cloudflare公共dns)"
+        choice=""
+        while [ "$choice" != "y" -a "$choice" != "n" ]
+        do
+            tyblue "是否要继续?(y/n)"
+            read choice
+        done
+        if [ $choice == y ]; then
+            if ! grep -q "#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script" /etc/resolv.conf; then
+                sed -i 's/^[ \t]*nameserver[ \t][ \t]*/#&/' /etc/resolv.conf
+                echo >> /etc/resolv.conf
+                echo 'nameserver 1.1.1.1' >> /etc/resolv.conf
+                echo 'nameserver 1.0.0.1' >> /etc/resolv.conf
+                echo '#This file has been edited by v2ray-WebSocket-TLS-Web-setup-script' >> /etc/resolv.conf
+            fi
+            green "修改完成！！"
+        fi
+    }
     if [ $v2ray_is_installed -eq 1 ]; then
         local v2ray_status="\033[32m已安装"
     else
@@ -1778,7 +1849,7 @@ start_menu()
     tyblue "  11. 删除域名"
     tyblue "  12. 修改id(用户ID/UUID)"
     tyblue "  13. 修改path(路径)"
-    tyblue "  14. 修改安装模式(TCP/WebSocket)"
+    tyblue "  14. 修改V2Ray传输协议(TCP/WebSocket)"
     echo
     tyblue " ----------------其它----------------"
     tyblue "  15. 尝试修复退格键无法使用的问题"
@@ -1958,18 +2029,20 @@ start_menu()
             exit 1
         fi
         get_base_information
-        local flag=1
-        if [ $mode -eq 1 ]; then
+        if [ $protocol_1 -ne 0 ] && [ $protocol_2 -ne 0 ]; then
             tyblue "-------------请输入你要修改的id-------------"
-            tyblue " 1.VLESS服务器id(V2Ray-TCP+XTLS)"
-            tyblue " 2.VMess服务器id(V2Ray-WebSocket+TLS)"
+            tyblue " 1. V2Ray-TCP+XTLS 的ID"
+            tyblue " 2. V2Ray-WebSocket+TLS 的ID"
             echo
-            choice=""
-            while [ "$choice" != "1" -a "$choice" != "2" ]
+            local flag=""
+            while [ "$flag" != "1" -a "$flag" != "2" ]
             do
-                read -p "您的选择是：" choice
+                read -p "您的选择是：" flag
             done
-            flag=$choice
+        elif [ $protocol_1 -ne 0 ]; then
+            local flag=1
+        else
+            local flag=2
         fi
         local v2id="v2id_$flag"
         tyblue "您现在的id是：${!v2id}"
@@ -1984,11 +2057,7 @@ start_menu()
         fi
         tyblue "-------------请输入新的id-------------"
         read v2id
-        if [ $flag -eq 1 ]; then
-            v2id_1="$v2id"
-        else
-            v2id_2="$v2id"
-        fi
+        [ $flag -eq 1 ] && v2id_1="$v2id" || v2id_2="$v2id"
         get_domainlist
         config_v2ray
         systemctl restart v2ray
@@ -2000,7 +2069,7 @@ start_menu()
             exit 1
         fi
         get_base_information
-        if [ $mode -eq 2 ]; then
+        if [ $protocol_2 -eq 0 ]; then
             red "V2Ray-TCP+XTLS+Web模式没有path!!"
             exit 0
         fi
@@ -2027,24 +2096,7 @@ start_menu()
             red "请先安装V2Ray-TLS+Web！！"
             exit 1
         fi
-        get_base_information
-        local old_mode=$mode
-        readMode
-        if [ $mode -eq $old_mode ]; then
-            red "模式未更换"
-            exit 0
-        fi
-        if [ $old_mode -eq 2 ]; then
-            path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
-            path="/$path"
-            v2id_2=`cat /proc/sys/kernel/random/uuid`
-            get_random_port
-        fi
-        get_domainlist
-        config_v2ray
-        systemctl restart v2ray
-        green "更换成功！！"
-        echo_end
+        change_protocol
     elif [ $choice -eq 15 ]; then
         echo
         yellow "尝试修复退格键异常问题，退格键正常请不要修复"
