@@ -91,6 +91,10 @@ else
     red "仅支持使用systemd的系统！"
     exit 1
 fi
+if [[ ! -d /dev/shm ]]; then
+    red "/dev/shm不存在，不支持的系统"
+    exit 1
+fi
 if [[ "$(type -P apt)" ]]; then
     if [[ "$(type -P dnf)" ]] || [[ "$(type -P yum)" ]]; then
         red "同时存在apt和yum/dnf"
@@ -1056,7 +1060,7 @@ worker_processes  auto;
 #error_log  logs/error.log  info;
 
 #pid        logs/nginx.pid;
-google_perftools_profiles ${nginx_prefix}/tcmalloc_temp/tcmalloc;
+google_perftools_profiles /dev/shm/nginx_tcmalloc/tcmalloc;
 
 events {
     worker_connections  1024;
@@ -1185,8 +1189,8 @@ server {
     return 301 https://\$host\$request_uri;
 }
 server {
-    listen unix:${nginx_prefix}/unixsocks_temp/default.sock default_server;
-    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2 default_server;
+    listen unix:/dev/shm/nginx_unixsocket/default.sock default_server;
+    listen unix:/dev/shm/nginx_unixsocket/h2.sock http2 default_server;
     return 301 https://${all_domains[0]};
 }
 EOF
@@ -1194,8 +1198,8 @@ EOF
     do
 cat >> $nginx_config<<EOF
 server {
-    listen unix:${nginx_prefix}/unixsocks_temp/default.sock;
-    listen unix:${nginx_prefix}/unixsocks_temp/h2.sock http2;
+    listen unix:/dev/shm/nginx_unixsocket/default.sock;
+    listen unix:/dev/shm/nginx_unixsocket/h2.sock http2;
 EOF
         if [ ${domainconfig_list[i]} -eq 1 ]; then
             echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
@@ -1230,16 +1234,16 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
-ExecStartPre=/bin/rm -rf ${nginx_prefix}/unixsocks_temp
-ExecStartPre=/bin/mkdir ${nginx_prefix}/unixsocks_temp
-ExecStartPre=/bin/chmod 755 ${nginx_prefix}/unixsocks_temp
-ExecStartPre=/bin/rm -rf ${nginx_prefix}/tcmalloc_temp
-ExecStartPre=/bin/mkdir ${nginx_prefix}/tcmalloc_temp
-ExecStartPre=/bin/chmod 777 ${nginx_prefix}/tcmalloc_temp
+ExecStartPre=/bin/rm -rf /dev/shm/nginx_unixsocket
+ExecStartPre=/bin/mkdir /dev/shm/nginx_unixsocket
+ExecStartPre=/bin/chmod 311 /dev/shm/nginx_unixsocket
+ExecStartPre=/bin/rm -rf /dev/shm/nginx_tcmalloc
+ExecStartPre=/bin/mkdir /dev/shm/nginx_tcmalloc
+ExecStartPre=/bin/chmod 0777 /dev/shm/nginx_tcmalloc
 ExecStart=${nginx_prefix}/sbin/nginx
 ExecStop=${nginx_prefix}/sbin/nginx -s stop
-ExecStopPost=/bin/rm -rf ${nginx_prefix}/tcmalloc_temp
-ExecStopPost=/bin/rm -rf ${nginx_prefix}/unixsocks_temp
+ExecStopPost=/bin/rm -rf /dev/shm/nginx_tcmalloc
+ExecStopPost=/bin/rm -rf /dev/shm/nginx_unixsocket
 PrivateTmp=true
 
 [Install]
@@ -1289,12 +1293,12 @@ EOF
     fi
 cat >> $v2ray_config <<EOF
                     {
-                        "dest": "${nginx_prefix}/unixsocks_temp/default.sock",
+                        "dest": "/dev/shm/nginx_unixsocket/default.sock",
                         "xver": 0
                     },
                     {
                         "alpn": "h2",
-                        "dest": "${nginx_prefix}/unixsocks_temp/h2.sock",
+                        "dest": "/dev/shm/nginx_unixsocket/h2.sock",
                         "xver": 0
                     }
                 ]
