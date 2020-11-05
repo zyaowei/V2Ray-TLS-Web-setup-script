@@ -1444,8 +1444,9 @@ echo_end()
         yellow " 使用XLTS请确保客户端V2Ray版本为v4.31.0+(XTLS在4.31.0版本中对流控进行了一次升级，并且不向下兼容)"
         echo
         green  " 目前支持支持XTLS的图形化客户端："
-        green  "   Windows    ：V2RayN  v3.26+"
+        green  "   Windows    ：V2RayN  v3.26+  Qv2ray v2.7.0-pre1+"
         green  "   Android    ：V2RayNG v1.4.8+"
+        green  "   Linux/MacOS：Qv2ray  v2.7.0-pre1+"
     fi
     if [ $protocol_2 -ne 0 ]; then
         echo
