@@ -2015,8 +2015,8 @@ start_menu()
         get_base_information
         if [ $protocol_1 -ne 0 ] && [ $protocol_2 -ne 0 ]; then
             tyblue "-------------请输入你要修改的id-------------"
-            tyblue " 1. V2Ray-TCP+XTLS 的ID"
-            tyblue " 2. V2Ray-WebSocket+TLS 的ID"
+            tyblue " 1. V2Ray-TCP+XTLS 的id"
+            tyblue " 2. V2Ray-WebSocket+TLS 的id"
             echo
             local flag=""
             while [ "$flag" != "1" -a "$flag" != "2" ]
