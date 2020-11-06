@@ -1,6 +1,6 @@
 #!/bin/bash
 nginx_version="nginx-1.19.4"
-openssl_version="openssl-openssl-3.0.0-alpha7"
+openssl_version="openssl-openssl-3.0.0-alpha8"
 v2ray_config="/usr/local/etc/v2ray/config.json"
 nginx_prefix="/etc/nginx"
 nginx_config="${nginx_prefix}/conf.d/v2ray.conf"
@@ -13,12 +13,9 @@ unset pretend_list
 protocol_1=""
 #V2Ray-WS-TLS使用的协议，0代表禁用，1代表VLESS，2代表VMess
 protocol_2=""
-port=""
 path=""
 v2id_1=""
 v2id_2=""
-port_web=""
-port_web_h2=""
 
 #定义几个颜色
 purple()
@@ -169,16 +166,6 @@ if [ -e /usr/bin/v2ray ] && [ -e /etc/nginx ]; then
     yellow "请选择1选项重新安装"
     sleep 3s
 fi
-
-#获取随机端口号
-get_random_port()
-{
-    temp_port=`shuf -i 1000-65535 -n1`
-    while netstat -tuln | tail -n +3 | awk '{print $4}' | awk -F : '{print $NF}' | grep -Eq "^[ \t]*$temp_port[ \t]*$"
-    do
-        temp_port=`shuf -i 1000-65535 -n1`
-    done
-}
 
 #将域名列表转化为一个数组
 get_all_domains()
@@ -1191,8 +1178,8 @@ server {
     return 301 https://\$host\$request_uri;
 }
 server {
-    listen 127.0.0.1:$port_web default_server;
-    listen 127.0.0.1:$port_web_h2 http2 default_server;
+    listen unix:/dev/shm/nginx_unixsocket/default.sock default_server;
+    listen unix:/dev/shm/nginx_unixsocket/h2.sock http2 default_server;
     return 301 https://${all_domains[0]};
 }
 EOF
@@ -1200,8 +1187,8 @@ EOF
     do
 cat >> $nginx_config<<EOF
 server {
-    listen 127.0.0.1:$port_web;
-    listen 127.0.0.1:$port_web_h2 http2;
+    listen unix:/dev/shm/nginx_unixsocket/default.sock;
+    listen unix:/dev/shm/nginx_unixsocket/h2.sock http2;
 EOF
         if [ ${domainconfig_list[i]} -eq 1 ]; then
             echo "    server_name www.${domain_list[i]} ${domain_list[i]};" >> $nginx_config
@@ -1236,12 +1223,16 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
+ExecStartPre=/bin/rm -rf /dev/shm/nginx_unixsocket
+ExecStartPre=/bin/mkdir /dev/shm/nginx_unixsocket
+ExecStartPre=/bin/chmod 711 /dev/shm/nginx_unixsocket
 ExecStartPre=/bin/rm -rf /dev/shm/nginx_tcmalloc
 ExecStartPre=/bin/mkdir /dev/shm/nginx_tcmalloc
 ExecStartPre=/bin/chmod 0777 /dev/shm/nginx_tcmalloc
 ExecStart=${nginx_prefix}/sbin/nginx
 ExecStop=${nginx_prefix}/sbin/nginx -s stop
 ExecStopPost=/bin/rm -rf /dev/shm/nginx_tcmalloc
+ExecStopPost=/bin/rm -rf /dev/shm/nginx_unixsocket
 PrivateTmp=true
 
 [Install]
@@ -1284,19 +1275,19 @@ EOF
 cat >> $v2ray_config <<EOF
                     {
                         "path": "$path",
-                        "dest": $port,
+                        "dest": "@/dev/shm/v2ray/ws.sock",
                         "xver": 0
                     },
 EOF
     fi
 cat >> $v2ray_config <<EOF
                     {
-                        "dest": $port_web,
+                        "dest": "/dev/shm/nginx_unixsocket/default.sock",
                         "xver": 0
                     },
                     {
                         "alpn": "h2",
-                        "dest": $port_web_h2,
+                        "dest": "/dev/shm/nginx_unixsocket/h2.sock",
                         "xver": 0
                     }
                 ]
@@ -1335,8 +1326,7 @@ EOF
     if [ $protocol_2 -ne 0 ]; then
         echo '        },' >> $v2ray_config
         echo '        {' >> $v2ray_config
-        echo '            "port": '"$port," >> $v2ray_config
-        echo '            "listen": "127.0.0.1",' >> $v2ray_config
+        echo '            "listen": "@/dev/shm/v2ray/ws.sock",' >> $v2ray_config
         if [ $protocol_2 -eq 2 ]; then
             echo '            "protocol": "vmess",' >> $v2ray_config
         else
@@ -1502,23 +1492,15 @@ echo_end()
     tyblue " 修改$nginx_config"
     tyblue " 将v.qq.com修改为你要镜像的网站"
     echo
-    tyblue " 脚本最后更新时间：2020.10.31"
+    tyblue " 脚本最后更新时间：2020.11.07"
     echo
     red    " 此脚本仅供交流学习使用，请勿使用此脚本行违法之事。网络非法外之地，行非法之事，必将接受法律制裁!!!!"
     tyblue " 2020.08"
 }
 
-#获取配置信息 protocol_1 v2id_1 protocol_2 v2id_2 path port
+#获取配置信息 protocol_1 v2id_1 protocol_2 v2id_2 path
 get_base_information()
 {
-    port_web=`grep "127\.0\.0\.1" $nginx_config | head -n 1`
-    port_web=${port_web#*:}
-    port_web=${port_web%%' '*}
-    port_web=${port_web%%;*}
-    port_web_h2=`grep "127\.0\.0\.1" $nginx_config | head -n 2 | tail -n 1`
-    port_web_h2=${port_web_h2#*:}
-    port_web_h2=${port_web_h2%%' '*}
-    port_web_h2=${port_web_h2%%;*}
     if grep -q "flow" $v2ray_config; then
         protocol_1=1
         v2id_1=`grep id $v2ray_config | head -n 1`
@@ -1531,9 +1513,6 @@ get_base_information()
     fi
     if [ $(grep -E "vmess|vless" $v2ray_config | wc -l) -eq 2 ]; then
         grep -q "vmess" $v2ray_config && protocol_2=2 || protocol_2=1
-        port=`grep port $v2ray_config | tail -n 1`
-        port=${port##*' '}
-        port=${port%%,*}
         path=`grep path $v2ray_config`
         path=${path##*' '}
         path=${path#*'"'}
@@ -1544,7 +1523,6 @@ get_base_information()
         v2id_2=${v2id_2%'"'*}
     else
         protocol_2=0
-        port=""
         path=""
         v2id_2=""
     fi
@@ -1722,12 +1700,6 @@ install_update_v2ray_tls_web()
         path="/$path"
         v2id_1=`cat /proc/sys/kernel/random/uuid`
         v2id_2=`cat /proc/sys/kernel/random/uuid`
-        get_random_port
-        port=$temp_port
-        get_random_port
-        port_web=$temp_port
-        get_random_port
-        port_web_h2=$temp_port
     fi
     config_nginx
     config_v2ray
@@ -1766,8 +1738,6 @@ start_menu()
             path=$(cat /dev/urandom | head -c 8 | md5sum | head -c 7)
             path="/$path"
             v2id_2=`cat /proc/sys/kernel/random/uuid`
-            get_random_port
-            port=$temp_port
         fi
         get_domainlist
         config_v2ray
