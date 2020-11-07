@@ -1931,6 +1931,9 @@ start_menu()
             tyblue "是否继续？(y/n)"
             read choice
         done
+        if [ $choice == n ]; then
+            return 0
+        fi
         green "重置域名中。。。"
         $HOME/.acme.sh/acme.sh --uninstall
         rm -rf $HOME/.acme.sh
