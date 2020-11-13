@@ -873,8 +873,10 @@ readProtocolConfig()
     echo
     yellow " 注："
     yellow "   1.XTLS完全兼容TLS"
-    yellow "   2.VLESS协议用于CDN，CDN可以看见传输的明文"
-    yellow "   3.若不知CDN为何物，请选3"
+    yellow "   2.WebSocket协议支持CDN，TCP不支持"
+    yellow "   3.TCP协议比WebSocket快"
+    yellow "   4.VLESS协议用于CDN，CDN可以看见传输的明文"
+    yellow "   5.若不知CDN为何物，请选3"
     echo
     local mode=""
     while [[ "$mode" != "1" && "$mode" != "2" && "$mode" != "3" && "$mode" != "4" && "$mode" != "5" ]]
