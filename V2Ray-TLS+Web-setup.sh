@@ -872,9 +872,9 @@ readProtocolConfig()
     green  "    适合一直使用CDN，且CDN可信任"
     echo
     yellow " 注："
-    yellow "   1.XTLS完全兼容TLS"
-    yellow "   2.WebSocket协议支持CDN，TCP不支持"
-    yellow "   3.TCP协议比WebSocket快"
+    yellow "   1.各协议理论速度对比：https://github.com/badO1a5A90/v2ray-doc/blob/main/v2ray_speed_test_v4.32.1.md"
+    yellow "   2.XTLS完全兼容TLS"
+    yellow "   3.WebSocket协议支持CDN，TCP不支持"
     yellow "   4.VLESS协议用于CDN，CDN可以看见传输的明文"
     yellow "   5.若不知CDN为何物，请选3"
     echo
@@ -1401,7 +1401,7 @@ echo_end()
     get_all_domains
     echo -e "\n\n\n"
     if [ $protocol_1 -ne 0 ]; then
-        tyblue "--------------------- V2Ray-TCP+XTLS+Web (不走cdn) ---------------------"
+        tyblue "--------------------- V2Ray-TCP+XTLS+Web (不走CDN) ---------------------"
         tyblue " 服务器类型            ：VLESS"
         tyblue " address(地址)         ：服务器ip"
         purple "  (Qv2ray:主机)"
@@ -1441,7 +1441,7 @@ echo_end()
     fi
     if [ $protocol_2 -ne 0 ]; then
         echo
-        tyblue "------------- V2Ray-WebSocket+TLS+Web (如果有cdn，会走cdn) -------------"
+        tyblue "------------- V2Ray-WebSocket+TLS+Web (如果有CDN，会走CDN) -------------"
         if [ $protocol_2 -eq 1 ]; then
             tyblue " 服务器类型            ：VLESS"
         else
@@ -1460,7 +1460,7 @@ echo_end()
             tyblue " encryption(加密)      ：none"
         else
             tyblue " alterId(额外ID)       ：0"
-            tyblue " security(加密方式)    ：使用cdn，推荐auto;不使用cdn，推荐none"
+            tyblue " security(加密方式)    ：使用CDN，推荐auto;不使用CDN，推荐none"
             purple "  (Qv2ray:安全选项;Shadowrocket:算法)"
         fi
         tyblue " ---Transport/StreamSettings(底层传输方式/流设置)---"
