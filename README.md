@@ -31,7 +31,7 @@ Red Hat基系统(包括CentOS、fedora)：
 ```bash
 [[ "$(type -P wget)" ]] || dnf -y install wget || yum -y install wget
 ```
-### 2. 获取脚本
+### 2. 获取/更新脚本
 ```bash
 wget -O V2Ray-TLS+Web-setup.sh --no-check-certificate https://github.com/kirin10000/V2Ray-TLS-Web-setup-script/raw/master/V2Ray-TLS+Web-setup.sh
 ```
