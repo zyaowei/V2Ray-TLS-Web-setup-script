@@ -208,8 +208,8 @@ setsshd()
     echo
     tyblue "------------------------------------------"
     tyblue " 安装可能需要比较长的时间(5-40分钟)"
-    tyblue " 如果和ssh断开连接将会很麻烦"
-    tyblue " 设置ssh连接超时时间将大大降低断连可能性"
+    tyblue " 如果中途断开连接将会很麻烦"
+    tyblue " 设置ssh连接超时时间将有效降低断连可能性"
     tyblue "------------------------------------------"
     choice=""
     while [ "$choice" != "y" -a "$choice" != "n" ]
@@ -327,10 +327,10 @@ doupdate()
         tyblue " 发行版：即稳定版"
         tyblue " LTS版：长期支持版本，可以理解为超级稳定版"
         tyblue "-------------------------注意事项-------------------------"
-        yellow " 1.升级系统可能需要15分钟或更久"
+        yellow " 1.升级过程中遇到问话/对话框，如果不明白，选择yes/y/第一个选项"
         yellow " 2.升级系统完成后将会重启，重启后，请再次运行此脚本完成剩余安装"
-        yellow " 3.有的时候不能一次性更新到所选择的版本，可能要更新多次"
-        yellow " 4.升级过程中遇到问话/对话框，如果不明白，选择yes/y/第一个选项"
+        yellow " 3.升级系统可能需要15分钟或更久"
+        yellow " 4.有的时候不能一次性更新到所选择的版本，可能要更新多次"
         yellow " 5.升级系统后以下配置可能会恢复系统默认配置："
         yellow "     ssh端口   ssh超时时间    bbr加速(恢复到关闭状态)"
         tyblue "----------------------------------------------------------"
@@ -670,10 +670,8 @@ install_bbr()
     tyblue " 6. 退出bbr安装"
     tyblue "------------------关于安装bbr加速的说明------------------"
     green  " bbr加速可以大幅提升网络速度，建议安装"
-    green  " 新版本内核的bbr比旧版强得多，最新版本内核的bbr强于bbrplus等"
     yellow " 更换第三方内核可能造成系统不稳定，甚至无法开机"
-    yellow " 更换内核需重启才能生效"
-    yellow " 重启后，请再次运行此脚本完成剩余安装"
+    yellow " 更换/升级内核需重启，重启后，请再次运行此脚本完成剩余安装"
     tyblue "---------------------------------------------------------"
     tyblue " 当前内核版本：${your_kernel_version}"
     tyblue " 最新内核版本：${latest_kernel_version}"
@@ -876,6 +874,7 @@ readProtocolConfig()
     yellow " 注："
     yellow "   1.XTLS完全兼容TLS"
     yellow "   2.VLESS协议用于CDN，CDN可以看见传输的明文"
+    yellow "   3.若不知CDN为何物，请选3"
     echo
     local mode=""
     while [[ "$mode" != "1" && "$mode" != "2" && "$mode" != "3" && "$mode" != "4" && "$mode" != "5" ]]
@@ -1413,12 +1412,12 @@ echo_end()
         purple "   (Shadowrocket:传输方式:none)"
         tyblue "  type(伪装类型)                ：none"
         purple "   (Qv2ray:协议设置-类型)"
-        tyblue "  security(传输层加密)          ：xtls/tls"
+        tyblue "  security(传输层加密)          ：xtls或tls \033[35;1m(此选项将决定是使用XTLS还是TLS)"
         purple "   (V2RayN(G):底层传输安全;Qv2ray:TLS设置-安全类型)"
         if [ ${#all_domains[@]} -eq 1 ]; then
             tyblue "  serverName(验证服务端证书域名)：${all_domains[@]}"
         else
-            tyblue "  serverName(验证服务端证书域名)：${all_domains[@]} (任选其一)"
+            tyblue "  serverName(验证服务端证书域名)：${all_domains[@]} \033[35;1m(任选其一)"
         fi
         purple "   (V2RayN(G):伪装域名;Qv2ray:TLS设置-服务器地址;Shadowrocket:Peer 名称)"
         tyblue "  allowInsecure                 ：false"
@@ -1449,7 +1448,7 @@ echo_end()
         if [ ${#all_domains[@]} -eq 1 ]; then
             tyblue " address(地址)         ：${all_domains[@]}"
         else
-            tyblue " address(地址)         ：${all_domains[@]} (任选其一)"
+            tyblue " address(地址)         ：${all_domains[@]} \033[35;1m(任选其一)"
         fi
         purple "  (Qv2ray:主机)"
         tyblue " port(端口)            ：443"
